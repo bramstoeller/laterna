@@ -12,13 +12,18 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
-      - uses: pre-commit/action@v3.0.1
+      # the hooks directly: pre-commit/action is unmaintained (Node 20)
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: pip install pre-commit && pre-commit run --all-files --show-diff-on-failure
 
   build:
     strategy:
@@ -34,9 +39,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
           cache: pip
@@ -85,7 +90,7 @@ jobs:
       # GitHub serves the artifact as one zip: the executable and _internal/
       # at its root. Zipping drops the Unix executable bit: on Linux run
       # chmod +x laterna after unpacking
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: laterna-${{ runner.os }}
           path: dist/laterna/
