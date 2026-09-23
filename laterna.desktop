@@ -1,0 +1,13 @@
+# Desktop launcher (Linux). Replace /path/to/laterna with the checkout's
+# folder (pip install -e . in its venv), then copy this file to
+# ~/.local/share/applications/. The shows are searched below Path.
+[Desktop Entry]
+Type=Application
+Name=laterna
+Comment=Projection onto stage frames: calibrate, look, export, present
+Exec="/path/to/laterna/venv/bin/laterna"
+Path=/path/to/laterna
+Terminal=false
+Icon=/path/to/laterna/laterna/icon/laterna.png
+StartupWMClass=laterna
+Categories=AudioVideo;Video;

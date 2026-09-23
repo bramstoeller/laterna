@@ -1,0 +1,91 @@
+# Builds the app for Linux and Windows with PyInstaller: a folder with the
+# executable and its _internal/ libraries, downloadable as one zip per OS.
+# Shows are not bundled: each is a folder with config.yaml, scenes.yaml,
+# images/ and videos/, anywhere below the executable's folder (the picker
+# offers every config.yaml it finds there). Only shows/example/ ships along.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: pre-commit/action@v3.0.1
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04     # older glibc, so the binary runs on newer distros too
+            exe: laterna
+          - os: windows-latest
+            exe: laterna.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      # the four sources are bundled as data: laterna/play.py hashes them into the
+      # render cache fingerprint. reportlab loads its font metrics modules by
+      # name, so they are collected explicitly
+      - name: Build
+        run: >
+          pyinstaller --noconfirm --onedir --windowed --name laterna
+          --icon laterna/icon/laterna.png
+          --add-data "laterna/icon/laterna.png:laterna/icon"
+          --add-data "laterna/render.py:laterna"
+          --add-data "laterna/video.py:laterna"
+          --add-data "laterna/play.py:laterna"
+          --add-data "laterna/frame.py:laterna"
+          --collect-submodules reportlab.pdfbase
+          laterna/__main__.py
+
+      - name: Add the example show
+        run: mkdir -p dist/laterna/shows && cp -r shows/example dist/laterna/shows/
+
+      # start the show picker headless from another folder and check it is
+      # still running after a few seconds (catches missing modules)
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cp -r dist/laterna smoke
+          cd /tmp && status=0 && SDL_VIDEODRIVER=dummy timeout 15 "$GITHUB_WORKSPACE/smoke/${{ matrix.exe }}" || status=$?
+          test "$status" -eq 124
+
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse dist/laterna smoke
+          $env:SDL_VIDEODRIVER = 'dummy'
+          $p = Start-Process -FilePath smoke/${{ matrix.exe }} -WorkingDirectory $env:TEMP -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { Write-Error "exited early with code $($p.ExitCode)"; exit 1 }
+          Stop-Process -Id $p.Id
+
+      # GitHub serves the artifact as one zip: the executable and _internal/
+      # at its root. Zipping drops the Unix executable bit: on Linux run
+      # chmod +x laterna after unpacking
+      - uses: actions/upload-artifact@v4
+        with:
+          name: laterna-${{ runner.os }}
+          path: dist/laterna/

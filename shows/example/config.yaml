@@ -1,0 +1,70 @@
+# Example show: two frames, a rectangle and a round arch, on a 1920x1080
+# projector. Copy this folder, rename it, and put your own frames, media
+# and scenes in it. All sizes are in mm; y points up.
+
+# global calibration (step 3, global alignment, writes these)
+scale_mm_per_px: 4.0         # measured on site: project a bar, measure it
+canvas: [1920, 1080]         # the projector's native pixels
+rotation: 0.0
+image_offset: [0.0, 0.0]
+
+# molding shading; its width is the plank width (frame.border)
+border: {profile: gilded, relief: 40.0, shadow: 0.5}
+light: {azimuth: 135.0, elevation: 50.0, ambient: 0.45, specular: 0.7, shininess: 10.0,
+  patina: 0.12}
+
+# the frames: the inner corners of the wood (where wood meets cloth), in
+# local mm around `origin` (the middle of the wood's bottom edge)
+objects:
+- id: 1
+  name: rectangle-left
+  frame:
+    border: 60.0
+    inner:
+    - [-640.0, 60.0]
+    - [-640.0, 1140.0]
+    - [640.0, 1140.0]
+    - [640.0, 60.0]
+  origin: [-1500.0, 0.0]
+  scale: 1.0
+  rotation: 0.0
+- id: 2
+  name: arch-right
+  frame:
+    border: 94.0
+    inner:
+    - [-468.0, 94.0]
+    - [-468.0, 1583.3]
+    - [-411.4, 1738.1]
+    - [-305.3, 1864.3]
+    - [-162.4, 1946.7]
+    - [0.0, 1975.3]
+    - [162.4, 1946.7]
+    - [305.3, 1864.3]
+    - [411.4, 1738.1]
+    - [468.0, 1583.3]
+    - [468.0, 94.0]
+  origin: [1500.0, 0.0]
+  scale: 1.0
+  rotation: 0.0
+
+gamma: 2.2
+
+# brightness per layer and the pretend spotlight (step 5, look, writes these)
+look:
+  molding: 1.0
+  fill: 1.0
+  images: 1.0
+  temperature: 3200.0
+  white: 6500.0
+  spot:
+    type: cone
+    strength: 0.5
+    position: [0.5, 1.15]
+    aim: [0.5, 0.65]
+    distance: 0.5
+    angle: 28.0
+
+# lighting desk input: off, sacn, artnet, enttec or demo
+dmx:
+  source: 'off'          # quoted: bare off is YAML for false

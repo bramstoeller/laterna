@@ -1,0 +1,33 @@
+# shows are local (their media, notes and calibration); only the example is public
+/shows/*
+!/shows/example/
+
+# source only: environments, caches, generated output and all media/documents stay out
+venv/
+.ruff_cache/
+**/_archive/morph/venv/
+__pycache__/
+*.pyc
+cache/
+renders/
+export/
+**/_archive/morph/landmarks/
+**/_archive/morph/face_landmarker.task
+# a show's media stay out; the empty folders are kept with a .gitkeep
+images/*
+videos/*
+!.gitkeep
+portretten/
+bouwtekeningen/
+*.mp4
+*.mov
+*.png
+!laterna/icon/*.png
+*.jpg
+# the example's two public-domain demo paintings
+!/shows/example/images/*.jpg
+*.webp
+*.pdf
+build/
+dist/
+*.spec

@@ -1,0 +1,47 @@
+# Example stages, played in order by step 7 (present). The two pictures in
+# images/ are public-domain paintings from Wikimedia Commons, small and
+# low quality on purpose: Katsushika Hokusai, The Great Wave off Kanagawa
+# (c. 1831), and Johannes Vermeer, Girl with a Pearl Earring (c. 1665).
+#
+# A stage maps media onto object ids (from config.yaml):
+#   image: images/<file>        a still picture
+#   video: videos/<file>        a clip, looping inside the frame
+#   slideshow: [file, ...]      pictures in turn, `hold` seconds each
+#   fit: [ids]                  size the medium over several frames together
+# Per stage: hold (seconds before moving on by itself; none = wait for a
+# key), transition / transition_time, molding_color, fill_color, blackout.
+transition: fade
+transition_time: 2.0
+stages:
+  - name: dark                    # start in the dark; waits for a key
+    blackout: true
+
+  - name: empty-frames            # just the gilded frames
+    mappings: []
+
+  - name: coloured-frames         # repainted molding and fill, 10 s, then on
+    hold: 10
+    molding_color: [180, 190, 200]
+    fill_color: [20, 30, 60]
+    mappings: []
+
+  - name: pictures                # one painting per frame
+    mappings:
+      - image: images/great-wave.jpg
+        objects: [1]
+      - image: images/girl-with-a-pearl-earring.jpg
+        objects: [2]
+
+  - name: one-picture-over-both   # one painting running on behind both frames
+    mappings:
+      - image: images/great-wave.jpg
+        objects: [1, 2]
+        fit: [1, 2]
+
+  # - name: a-clip                # put a clip in videos/ to try this
+  #   mappings:
+  #     - video: videos/clip.mp4
+  #       objects: [2]
+
+  - name: end
+    blackout: true

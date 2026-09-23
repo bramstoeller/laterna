@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "laterna"
+version = "0.1.0"
+description = "Projection mapping onto stage frames: calibrate, light, export and play a show"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Bram Stoeller", email = "bram.stoeller@brainbuilders.nl" }]
+requires-python = ">=3.12"
+keywords = ["projection mapping", "theatre", "stage", "projector", "dmx", "sacn", "art-net"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Artistic Software",
+    "Topic :: Multimedia :: Graphics :: Presentation",
+    "Topic :: Multimedia :: Video :: Display",
+]
+# ranges; requirements.txt pins the exact versions the build uses
+dependencies = [
+    "numpy>=2.0",
+    "opencv-python>=4.10",
+    "pygame-ce>=2.5",
+    "PyYAML>=6.0",
+    "pydantic>=2.8",     # checks config.yaml and scenes.yaml
+    "pyserial>=3.5",     # the Enttec USB DMX input
+    "reportlab>=4.0",    # the PDF export
+    "pillow>=10.0",
+    "charset-normalizer>=3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/BramStoeller/laterna"
+Issues = "https://github.com/BramStoeller/laterna/issues"
+
+[project.optional-dependencies]
+dev = ["pre-commit", "ruff", "pyinstaller"]
+
+[project.gui-scripts]
+laterna = "laterna.menu:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["laterna"]
+
+# the source distribution: the code, the example show and the build
+# tools; no show data (shows/ other than the example)
+[tool.hatch.build.targets.sdist]
+include = ["/laterna", "/shows/example", "/tools", "/README.md", "/LICENSE", "/requirements.txt"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["shows/*/_archive"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+# the classic core (pyflakes, syntax-level pycodestyle) plus import order
+select = ["E4", "E7", "E9", "F", "I"]

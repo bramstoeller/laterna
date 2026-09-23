@@ -1,0 +1,9 @@
+charset-normalizer==3.5.1
+numpy==2.5.1
+opencv-python==5.0.0.93
+pillow==12.3.0
+pydantic==2.13.5
+pygame-ce==2.5.7
+pyserial==3.5
+PyYAML==6.0.3
+reportlab==5.0.1
