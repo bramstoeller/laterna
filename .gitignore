@@ -26,6 +26,8 @@ bouwtekeningen/
 *.jpg
 # the example's two public-domain demo paintings
 !/shows/example/images/*.jpg
+# the README's picture (tools/make_readme_image.py)
+!/docs/*.jpg
 *.webp
 *.pdf
 build/

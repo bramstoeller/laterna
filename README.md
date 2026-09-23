@@ -7,6 +7,12 @@ pictures, slideshows and videos inside, lights them with pretend
 spotlights and steps through the show's stages on a key press or from a
 lighting desk (sACN, Art-Net or an Enttec USB DMX interface).
 
+![The example show: two frames with a public-domain painting each, a gilded
+molding drawn on the wood and a pretend spotlight](docs/example.jpg)
+
+*The example show (`shows/example/`), rendered: two frames, a painting in
+each, the gilded molding and the pretend spotlights drawn by laterna.*
+
 ## Install
 
 Python 3.12 or newer:
@@ -23,9 +29,10 @@ venv/bin/pip install -e ".[dev]"
 venv/bin/pre-commit install
 ```
 
-Or download a ready build (Linux, Windows) from the Actions tab: the
-`laterna-<OS>` artifact is a zip with the executable and its `_internal/`
-folder. On Linux, `chmod +x laterna` after unpacking.
+Or download a ready build for Linux or Windows from the
+[releases](https://github.com/BramStoeller/laterna/releases): unpack it
+and run `laterna` (`laterna.exe`) in the `laterna/` folder; put your shows
+next to it.
 
 ## Shows
 
@@ -70,10 +77,17 @@ does not have are reported by stage or object name.
 
 ## Build and release
 
-`.github/workflows/build.yml` lints and builds the Linux and Windows
-versions with PyInstaller on every push. Pushing a tag `v<version>`
-(matching `version` in `pyproject.toml`) publishes to PyPI through
-`.github/workflows/publish.yml`.
+Work happens on `develop`; `main` holds what is released.
+
+- `.github/workflows/lint.yml`: the pre-commit hooks, on every push.
+- `.github/workflows/build.yml`: the Linux and Windows builds with
+  PyInstaller, on pushes to `main`, on pull requests into `main` and by
+  hand (Actions → build → Run workflow); not on `develop`.
+- `.github/workflows/release.yml`: pushing a tag `v<version>` (matching
+  `version` in `pyproject.toml`) makes a GitHub release with
+  `laterna-<version>-linux.tar.gz` and `laterna-<version>-windows.zip`
+  (plus the wheel and sdist), and publishes to PyPI when the repository
+  variable `PUBLISH_PYPI` is `true`.
 
 ## License
 
