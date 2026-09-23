@@ -193,9 +193,9 @@ def root_folder():
 def main():
     root = root_folder()
     shows = find_shows(root)
-    # the picker opens at the desktop's size; a show then needs the display
-    # at exactly its canvas (on site the projector desktop already is)
-    screen = ui.init_screen((0, 0), ui.APP_NAME, mouse_visible=True)
+    # the picker is drawn at ui.menu_size(), a show at its canvas size; both
+    # scaled to fill the screen (ui.set_canvas)
+    screen = ui.init_screen(None, ui.APP_NAME, mouse_visible=True)
     picker_size = screen.get_size()
 
     def open_show(index):
@@ -207,14 +207,14 @@ def main():
             return f'{folder.name}: {exc}'
         canvas = tuple(cfg['canvas'])
         if screen.get_size() != canvas:
-            screen = pygame.display.set_mode(canvas, pygame.FULLSCREEN)
+            screen = ui.set_canvas(canvas)
         os.chdir(folder)  # config.yaml, scenes.yaml, media and caches resolve here
         try:
             app_menu(screen, folder)
         finally:
             os.chdir(root)
         if screen.get_size() != picker_size:
-            screen = pygame.display.set_mode(picker_size, pygame.FULLSCREEN)
+            screen = ui.set_canvas(picker_size)
         pygame.display.set_caption(ui.APP_NAME)
         return ''
 
