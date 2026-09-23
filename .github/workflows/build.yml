@@ -1,30 +1,22 @@
 # Builds the app for Linux and Windows with PyInstaller: a folder with the
-# executable and its _internal/ libraries, downloadable as one zip per OS.
+# executable and its _internal/ libraries, downloadable as one zip per OS
+# (a release packs them as .tar.gz / .zip: release.yml).
 # Shows are not bundled: each is a folder with config.yaml, scenes.yaml,
 # images/ and videos/, anywhere below the executable's folder (the picker
 # offers every config.yaml it finds there). Only shows/example/ ships along.
 name: build
 
+# not on develop: on main, on pull requests into main, by hand (Actions ->
+# build -> Run workflow) and from the release workflow
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 jobs:
-  lint:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.14'
-      # the hooks directly: pre-commit/action is unmaintained (Node 20)
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
-      - run: pip install pre-commit && pre-commit run --all-files --show-diff-on-failure
-
   build:
     strategy:
       fail-fast: false

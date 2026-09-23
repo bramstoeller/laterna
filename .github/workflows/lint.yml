@@ -1,0 +1,22 @@
+# The pre-commit hooks (ruff and the hygiene checks), on every push and
+# pull request: quick, so it runs on develop too.
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      # the hooks directly: pre-commit/action is unmaintained (Node 20)
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: pip install pre-commit && pre-commit run --all-files --show-diff-on-failure

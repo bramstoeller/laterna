@@ -1,0 +1,78 @@
+# A version tag (v0.1.0, ...; must match `version` in pyproject.toml) makes
+# a GitHub release with the Linux and Windows builds as downloads:
+# laterna-<version>-linux.tar.gz (keeps the executable bit) and
+# laterna-<version>-windows.zip, each unpacking to a laterna/ folder.
+#
+# PyPI: only when the repository variable PUBLISH_PYPI is `true`
+# (Settings -> Secrets and variables -> Actions -> Variables), through
+# trusted publishing: on pypi.org the project (or a pending publisher)
+# trusts this repository, this workflow file and the `pypi` environment.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  dist:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: The tag matches the version in pyproject.toml
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, version $version"; exit 1; }
+      - name: Build sdist and wheel
+        run: pip install build twine && python -m build && twine check --strict dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    needs: [build, dist]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+      - name: Pack the builds
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          mkdir release
+          mv artifacts/laterna-Linux laterna && chmod +x laterna/laterna
+          tar czf release/laterna-$version-linux.tar.gz laterna && rm -r laterna
+          mv artifacts/laterna-Windows laterna
+          zip -qr release/laterna-$version-windows.zip laterna && rm -r laterna
+          cp artifacts/dist/* release/
+          ls -l release
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" release/*
+          --repo "$GITHUB_REPOSITORY" --title "laterna ${GITHUB_REF_NAME#v}" --generate-notes
+
+  pypi:
+    needs: dist
+    if: vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/laterna
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
