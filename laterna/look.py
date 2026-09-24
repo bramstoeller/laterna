@@ -259,7 +259,7 @@ def run(
     def rerender():
         nonlocal surface, molding
         renderer.apply_look()
-        desk.kelvin = float(cfg['look']['temperature'])  # the desk's cct 0 / 128
+        desk.kelvin = float(cfg['look']['temperature'])  # the desk's cct 128
         lights.white = float(cfg['look']['white'])
         lights.collapse = float(cfg['look']['spot_collapse'])
         surface = ui.to_surface(renderer.render(stages[idx]))

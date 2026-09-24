@@ -51,10 +51,11 @@ what is left. The colour temperature is filtered along (up = cooler),
 so it never jumps either.
 
 Until the desk's first frame the levels are full, so the show also runs
-with nothing connected. A channel the desk keeps at 0 from the start
-counts as untouched and stays full too (cct: 128), so a desk that boots
-with everything at 0 does not black the show out; once a channel has
-been above 0 the desk rules it, 0 included (faded to from full). When
+with nothing connected. After that a channel stays full too (cct: 128)
+until its value changes: whatever a desk sends at first (0 for a
+channel it has not patched, or what it booted with) does not black the
+show out; once the channel moves the desk rules it (faded to from
+full). When
 the signal stops the last frame holds (a DMX receiver never blacks out
 by itself).
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
@@ -665,7 +666,7 @@ class Desk:
     """The light desk's view of the projection: the fixture's channels,
     decoded to Levels. `on` is False for dmx.source off; levels() then are
     full, and so they are until the desk's first frame; a channel stays
-    at its initial value while the desk keeps it at 0 (see `touched`)."""
+    at its initial value until the desk changes it (see `first`)."""
 
     def __init__(self, cfg, receiver=None):
         from . import render
@@ -689,8 +690,9 @@ class Desk:
             Smooth(self.settings['smooth'], self.initial) if self.settings['smooth'] else None
         )
         self.override = {}  # offset -> (value by hand, the desk's value it took over from)
-        # the offsets the desk has sent above 0; until then its 0 means
-        # "not touched yet" (a desk booting at 0) and the initial value holds
+        # offset -> the first value the desk sent; while a channel still
+        # sends that it is not touched yet and the initial value holds
+        self.first = {}
         self.touched = set()
 
     @property
@@ -708,8 +710,8 @@ class Desk:
 
     def targets(self):
         """What the desk sends, by offset (the initial full light before
-        its first frame, or without a desk, and for a channel it has kept
-        at 0 so far)."""
+        its first frame, or without a desk, and for a channel it has not
+        changed yet)."""
         targets = dict(self.initial)
         if self.receiver is not None:
             data, frames = self.receiver.snapshot()
@@ -717,7 +719,7 @@ class Desk:
                 first = self.settings['address'] - 1
                 for off in self.offsets:
                     value = data[first + off - 1]
-                    if value:
+                    if self.first.setdefault(off, value) != value:
                         self.touched.add(off)
                     if off in self.touched:
                         targets[off] = float(value)
