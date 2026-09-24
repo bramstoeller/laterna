@@ -765,6 +765,11 @@ class Desk:
         value = self._value(data, offset)
         return 1.0 if value is None else value / 255.0
 
+    def master(self):
+        """The master now, 0..1 (filtered like the lamps follow it; 1 with no
+        master channel)."""
+        return self._level(self.frame(), self.channels['master'])
+
     def levels(self):
         data = self.frame()
         master = self._level(data, self.channels['master'])

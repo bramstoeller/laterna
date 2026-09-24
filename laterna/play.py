@@ -16,13 +16,15 @@ Keys:
 
 A small bar in the top right corner tells the operator what the show is
 doing: red while a transition runs, orange while a stage's hold runs,
-green when it waits for a key. It is a row of 2 x 2 px blocks 2 px apart:
-one in the corner plus, darker, one for every whole second left (rounded
-up), so red and orange lose a block per second towards the corner; green
-is just the corner block. A countdown too long to fit in a
-quarter of the width goes to 2, 3, 5, 10, 15, 20, 30 seconds a block and
-then whole minutes; the step follows the whole stretch being counted, so
-it never changes halfway and the bar shrinks smoothly. The left and the
+green when it waits for a key, dim blue in a blackout with the desk's
+master at 0 (the master coming up goes on, see below). It is a row of
+2 x 2 px blocks 2 px apart: one in the corner plus, darker, one for every
+whole second left (rounded up), so red and orange lose a block per
+second towards the corner; green and blue are just the corner block.
+A countdown too long to fit in a quarter of the width goes to 2, 3, 5,
+10, 15, 20, 30 seconds a block and then whole minutes; the step follows
+the whole stretch being counted, so it never changes halfway and the bar
+shrinks smoothly. The left and the
 right bars work out their own step, and all the left ones share theirs,
 so those stay comparable with each other.
 
@@ -42,6 +44,14 @@ of scenes.yaml) moves on to the next stage by itself that long after its
 fade-in finished; a key press still works earlier. Without a hold the
 stage waits for a key. Its `transition_time` (or the global one) is the
 fade to the next stage.
+
+With a light desk the master also steps in and out of blackout stages.
+A stage waiting for a key, followed by a blackout stage, goes into it
+when the desk's master goes to 0 after the stage has been lit; a
+blackout stage waiting for a key goes on to the next stage when the
+master comes up after having been 0 there. Both at once, without the
+fade: the desk does the fading. So the desk can take the show through
+its dark moments by itself, and a key still works as always.
 
 Transitions are crossfades. The duration comes from `- fade: <seconds>`
 entries between stages in scenes.yaml; where absent, the global `fade`
@@ -103,6 +113,7 @@ STATE_PITCH = 4  # block + gap
 STATE_FADE = ((128, 0, 0), (64, 0, 0))  # a transition runs
 STATE_HOLD = ((128, 64, 0), (64, 32, 0))  # a stage hold runs
 STATE_KEY = ((0, 128, 0), (0, 64, 0))  # waiting for a key
+STATE_DESK = ((0, 0, 32), (0, 0, 32))  # a blackout waits for the master to come up
 STATE_CLIP = ((64, 64, 64), (64, 64, 64))  # the clips' own bars, left, flat grey
 BAR_TICK_MS = 250  # redraw interval during a hold (1 px of bar)
 BAR_LADDER = (1, 2, 3, 5, 10, 15, 20, 30)  # seconds per block, then whole minutes
@@ -117,6 +128,7 @@ STEP_KEYS = {
     pygame.K_LEFT: -1,
 }
 DOUBLE_PRESS = 0.5
+DARK = 0.5 / 255.0  # the master below this is 0 (half a DMX value)
 
 
 def bar_unit(span, max_blocks):
@@ -505,7 +517,7 @@ def run(
         elif hold_until is not None:
             bar(0, STATE_HOLD, hold_until - now(), stages[idx].get('hold') or 0.0)
         else:
-            bar(0, STATE_KEY, 0.0)
+            bar(0, STATE_DESK if master_dark and _is_blackout(stages[idx]) else STATE_KEY, 0.0)
         clips = clip_states(idx)  # the clips, top left, on one shared step
         if clips:
             unit = bar_unit(max(max(span, left) for _, left, span in clips), max_blocks)
@@ -558,9 +570,31 @@ def run(
     pressed = None  # (key, when) of a step key pressed during a fade
     cut = None  # +1/-1 when a second press asked to step on at once
 
+    master_seen = set()  # 'up' / 'down': how the master has stood on this stage
+    master_dark = False  # the master is at 0 (the desk's blue state block)
+
+    def check_master():
+        """The master steps in and out of blackout stages (see the module
+        doc): into the blackout that follows a stage waiting for a key when
+        the master goes to 0 there, out of a blackout waiting for a key when
+        it comes up after having been 0 there."""
+        nonlocal master_dark
+        if not desk.receiving:
+            return
+        master_dark = desk.master() < DARK
+        master_seen.add('down' if master_dark else 'up')
+        if hold_until is not None or idx + 1 >= total:
+            return
+        here, after = _is_blackout(stages[idx]), _is_blackout(stages[idx + 1])
+        if not here and after and master_dark and 'up' in master_seen:
+            go_to(idx + 1, instant=True)
+        elif here and not master_dark and 'down' in master_seen:
+            go_to(idx + 1, instant=True)
+
     def arm_hold():
         """Start the current stage's hold, if it has one and a next stage."""
         nonlocal hold_until
+        master_seen.clear()  # a new stage: the master starts over
         hold = stages[idx].get('hold')
         hold_until = now() + hold if hold is not None and idx + 1 < total else None
 
@@ -576,23 +610,24 @@ def run(
         if hold_until is not None and now() >= hold_until:
             go_to(idx + 1)
 
-    def go_to(new):
-        """Move to stage `new`, fading. A double press during the fade cuts
-        it short and carries on in that direction (see pump), so the show
-        can be stepped through faster than the fades allow."""
+    def go_to(new, instant=False):
+        """Move to stage `new`, fading (`instant`: at once). A double press
+        during the fade cuts it short and carries on in that direction (see
+        pump), so the show can be stepped through faster than the fades
+        allow."""
         nonlocal idx, transition_until, transition_span, pressed, cut
         while 0 <= new < total and new != idx:
             if not wait_for(new):
                 return
             pressed, cut = None, None
-            go_once(new)
+            go_once(new, instant)
             if cut is None:
                 return
             new, cut = idx + cut, None
 
-    def go_once(new):
+    def go_once(new, instant=False):
         nonlocal idx, transition_until, transition_span
-        fade = fades[min(idx, new)]
+        fade = 0.0 if instant else fades[min(idx, new)]
         transition_until, transition_span = now() + fade, fade
         if _is_blackout(stages[new]) and not _is_blackout(stages[idx]):
             dim(
@@ -745,6 +780,7 @@ def run(
             handle(pygame.event.wait(hold_wait_ms()))
         if running:
             check_hold()
+            check_master()
             if hold_until is not None and now() - last_shown >= BAR_TICK_MS / 1000.0:
                 show(idx)  # the state bar shrinks with the hold
 

@@ -43,6 +43,7 @@ PANEL = (0.96, 0.95, 0.92)
 GREEN = (0.24, 0.48, 0.24)
 ORANGE = (0.75, 0.48, 0.10)
 RED = (0.75, 0.22, 0.17)
+BLUE = (0.20, 0.30, 0.75)
 BLUE = (0.18, 0.40, 0.56)
 NIGHT = (0.04, 0.04, 0.04)
 WOOD = (0.16, 0.12, 0.08)
@@ -365,6 +366,12 @@ BLOCKS = [
     (RED, 'red', 4, 'a transition runs: one key press does nothing, two cut it short'),
     (ORANGE, 'orange', 4, 'the stage holds: it moves on by itself, the blocks count down'),
     (GREEN, 'green', 1, 'waiting for a key'),
+    (
+        BLUE,
+        'blue',
+        1,
+        "blackout with the desk's master at 0: the master coming up goes on to the next stage",
+    ),
     (
         (0.35, 0.35, 0.35),
         'grey',
