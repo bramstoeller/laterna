@@ -52,7 +52,7 @@ class Cancelled(Exception):
 
 def full_light(cfg):
     """The gain (3,) the lamps apply with the desk at full: the headroom
-    back, in the colour of the light (lamps.dim_fills at level 1)."""
+    back, in the colour of the light (lamps.lamp_gain at level 1)."""
     look = cfg['look']
     return render.headroom_gain(cfg) * render.white_gain(look['temperature'], look['white'])
 
