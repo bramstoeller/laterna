@@ -361,6 +361,7 @@ def build_specs(cfg, stage, base, alpha):
             'inv_alpha': inv_alpha[flat][:, None],
             'premult': premult[flat].astype(np.float32),
             'shown': -1,
+            'objects': list(m['objects']),
         }
         if spec['kind'] == 'slideshow':
             spec['path'] = _slideshow_key(m)  # pool key, see SlideshowClip
@@ -405,6 +406,17 @@ class StagePlayer:
 
     def paths(self):
         return set(self.clips)
+
+    def hold_dark(self, dt, lit):
+        """Hold back the clocks of the clips none of whose objects is in
+        `lit` (the ids whose canvas gives light) by `dt` seconds: in the
+        dark a slideshow does not move on and a video does not run, they
+        carry on where they were once their canvas is lit again."""
+        for path, clip in self.clips.items():
+            if clip.t0 is None:
+                continue
+            if not any(o in lit for s in self.specs if s['path'] == path for o in s['objects']):
+                clip.t0 += dt
 
     def stop(self, keep=()):
         """Stop this stage's clips so they restart on the next entry —
