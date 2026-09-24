@@ -20,7 +20,10 @@ rest follows from the plank width:
   touches every piece in its middle; the wood beyond the fillet is painted
   black on the set;
 - the molding is the band `border` wide inside the projected contour,
-  cut away where the canvas is.
+  cut away where the canvas is;
+- the round canvas is the projected contour `border` inwards: the sight
+  edge of the fictional round frame, which the frame's shadow follows (at
+  a rounded corner it cuts across the real inner corner).
 
 Local (0, 0) is put on the stage by the object's origin (its scale and
 rotation pivot there); the frames stand with the middle of the wood's
@@ -28,7 +31,8 @@ bottom edge on it. build() returns the geometry render.py draws:
 {'polygons': [{'points', 'color'}] (the screen: filled, masks the
 pictures), 'strokes': [{'points', 'width', 'color'}] (the molding: a
 stroke centred on its path, shaded with the relief profile), 'canvas':
-[points] (the picture area, cut out of the molding), 'corners' (the inner
+[points] (the picture area, cut out of the molding), 'round_canvas':
+[points] (the fictional round sight edge, for the shadow), 'corners' (the inner
 corners) and 'wood' (the mitred outer polygon) for the shape calibration}.
 """
 
@@ -140,6 +144,7 @@ def build(frame):
         'polygons': [{'points': outline, 'color': FILL}],
         'strokes': [{'points': np.vstack([path, path[:1]]), 'width': border, 'color': COLOR}],
         'canvas': [inner],
+        'round_canvas': [offset_polygon(outline, -border)],
         'corners': inner,
         'wood': wood,
     }

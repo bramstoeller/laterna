@@ -126,6 +126,12 @@ def object_canvas_world(cfg, obj):
     return [_local_to_world(p, obj) for p in object_shape(cfg, obj)['canvas']]
 
 
+def object_round_canvas_world(cfg, obj):
+    """Round canvas polygons of an object (world mm): the sight edge of the
+    fictional round frame, which the frame's shadow follows."""
+    return [_local_to_world(p, obj) for p in object_shape(cfg, obj)['round_canvas']]
+
+
 def object_fills_world(cfg, obj):
     """Screen polygons with their fill colour: [(points world mm, rgb)]. The
     fill shows wherever a stage maps no image or video onto the object."""
@@ -263,6 +269,15 @@ def canvas_px(cfg, ids=None, ss=1):
     ]
 
 
+def round_canvas_px(cfg, ids=None, ss=1):
+    """Round canvas polygons of the given objects (all when None), in canvas px."""
+    return [
+        world_to_px(p, cfg, ss)
+        for o in _objects(cfg, ids)
+        for p in object_round_canvas_world(cfg, o)
+    ]
+
+
 def object_mask(cfg, oid, ss=1):
     """Boolean mask (h, w) of one object: its screen polygons (molding
     included), at the canvas resolution times `ss`."""
@@ -332,7 +347,7 @@ def _stroke_geometry(points, width_px, d_out, closed):
     return np.vstack([outer, inner[::-1]]), None, outer
 
 
-def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=()):
+def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=(), round_canvas_px=None):
     """Molding shading for a set of screen polygons and molding strokes.
 
     A stroke covers what SVG draws: a band `width` wide centred on its path
@@ -344,7 +359,8 @@ def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=()):
     one with the smaller t wins. One distance transform per distinct
     (width, colour) class. A screen edge without a stroke gets no molding.
     `canvas_px` polygons (the frames' picture areas) are cut out of the
-    molding: the picture shows there.
+    molding: the picture shows there. The shadow is thrown by the fictional
+    round frame: the screen minus `round_canvas_px` (the molding when None).
 
     Returns (inside, molding, image, fade, shading): boolean masks, a
     float32 RGB image with the shaded molding in the band (black elsewhere),
@@ -424,7 +440,8 @@ def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=()):
     image[molding] = molding_rgb(colors[which[molding]], *shading)
 
     # the frame stands proud of the picture and casts a soft shadow onto it,
-    # away from the light: the molding silhouette shifted and blurred
+    # away from the light: the silhouette of the round frame (the molding
+    # with round sight edges, as it pretends to be) shifted and blurred
     fade = np.ones(shape, np.float32)
     strength = float(border.get('shadow', 0.0))
     if strength > 0:
@@ -434,8 +451,11 @@ def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=()):
         shift = np.float32(
             [[1, 0, -lx / horizontal * length], [0, 1, -ly / horizontal * length]]
         )  # away from the light
+        frame_mask = molding
+        if round_canvas_px is not None:
+            frame_mask = inside & ~_fill_mask(shape, round_canvas_px)
         silhouette = cv2.warpAffine(
-            molding.astype(np.float32),
+            frame_mask.astype(np.float32),
             shift,
             (w, h),
             flags=cv2.INTER_LINEAR,
@@ -1065,6 +1085,7 @@ class StageRenderer:
             cfg,
             ss,
             canvas_px(cfg, None, ss),
+            round_canvas_px(cfg, None, ss),
         )
         flat = image.reshape(-1, 3)
         self.molding_idx = np.flatnonzero(molding)  # opaque molding
