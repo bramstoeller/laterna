@@ -51,11 +51,13 @@ what is left. The colour temperature is filtered along (up = cooler),
 so it never jumps either.
 
 Until the desk's first frame the levels are full, so the show also runs
-with nothing connected. After that a channel stays full too (cct: 128)
-until its value changes: whatever a desk sends at first (0 for a
-channel it has not patched, or what it booted with) does not black the
-show out; once the channel moves the desk rules it (faded to from
-full). When
+with nothing connected. After that, with `start: full` (the default), a
+channel stays full too (cct: 128) until its value changes: whatever a
+desk sends at first (0 for a channel it has not patched, or what it
+booted with) does not black the show out; once the channel moves the
+desk rules it (faded to from full). With `start: desk` the desk rules
+from its first frame, taken over at once (no fade from full): for a show
+whose dark comes from the desk, which starts with the master at 0. When
 the signal stops the last frame holds (a DMX receiver never blacks out
 by itself).
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
@@ -78,6 +80,7 @@ DEFAULTS = {
     'cct': [2250.0, 6500.0],
     'channels': None,
     'smooth': [0.04, 0.08],
+    'start': 'full',
 }
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
 GLOBAL_CHANNELS = ('master', 'cct')
@@ -168,6 +171,8 @@ def settings(cfg):
     if not 1 <= dmx['address'] <= 512 - span + 1:
         raise ValueError(f'dmx.address is 1..{512 - span + 1} ({span} channels used)')
     dmx['smooth'] = parse_smooth(dmx['smooth'])
+    if dmx['start'] not in ('full', 'desk'):
+        raise ValueError('dmx.start is full (a channel is full until it moves) or desk')
     return dmx
 
 
@@ -666,7 +671,8 @@ class Desk:
     """The light desk's view of the projection: the fixture's channels,
     decoded to Levels. `on` is False for dmx.source off; levels() then are
     full, and so they are until the desk's first frame; a channel stays
-    at its initial value until the desk changes it (see `first`)."""
+    at its initial value until the desk changes it (see `first`), unless
+    dmx.start is desk."""
 
     def __init__(self, cfg, receiver=None):
         from . import render
@@ -694,6 +700,7 @@ class Desk:
         # sends that it is not touched yet and the initial value holds
         self.first = {}
         self.touched = set()
+        self.snap = False  # start: desk, first frame: the filter jumps there
 
     @property
     def on(self):
@@ -717,6 +724,9 @@ class Desk:
             data, frames = self.receiver.snapshot()
             if frames:
                 first = self.settings['address'] - 1
+                if self.settings['start'] == 'desk' and not self.touched:
+                    self.touched.update(self.offsets)
+                    self.snap = True
                 for off in self.offsets:
                     value = data[first + off - 1]
                     if self.first.setdefault(off, value) != value:
@@ -739,6 +749,9 @@ class Desk:
                 del self.override[offset]  # the desk moved: it takes over again
             else:
                 targets[offset] = value
+        if self.smooth and self.snap:
+            self.smooth.values.update(targets)
+            self.snap = False
         return self.smooth.step(targets) if self.smooth else targets
 
     def _value(self, data, offset):

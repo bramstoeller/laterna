@@ -137,6 +137,7 @@ class Dmx(Node):
     cct: Annotated[list[Positive], Field(min_length=2, max_length=2)] | None = None
     smooth: Annotated[list[NonNegative], Field(min_length=2, max_length=2)] | None = None
     channels: Channels | None = None
+    start: Literal['full', 'desk'] | None = None  # full: a channel is full until it moves
 
     @field_validator('source', mode='before')
     @classmethod
