@@ -262,8 +262,8 @@ def run(
         desk.kelvin = float(cfg['look']['temperature'])  # the desk's cct 128
         lights.white = float(cfg['look']['white'])
         lights.collapse = float(cfg['look']['spot_collapse'])
-        surface = ui.to_surface(renderer.render(stages[idx]))
-        molding = ui.to_surface(renderer.render_molding(stages[idx]))
+        surface = renderer.render(stages[idx])
+        molding = renderer.render_molding(stages[idx])
 
     def set_page(new):
         """Switch pages; the desk page brings the faders and the mouse,

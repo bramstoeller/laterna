@@ -64,15 +64,13 @@ playing the same file: then it runs on seamlessly.
 A stage with `blackout: true` is all black. The fade into it (and out
 of it) takes the usual fade time and dims everything together, as if
 the desk's master fader went down: the light reddens like a tungsten
-spot's on the way (laterna/lamps.py); this runs on pygame blend blits, no
-rendering.
+spot's on the way (laterna/lamps.py); no rendering.
 
 The light desk can dim it all: `dmx:` in config.yaml (laterna/dmx.py) gives
 the desk a master, the light's colour temperature and per object a lamp
 on its canvas and one on its frame, over sACN, Art-Net or an Enttec
 widget. The levels multiply into everything above, fades
-included; the
-lamps (laterna/lamps.py) apply them per tick with blend blits. H also shows
+included; the lamps (laterna/lamps.py) apply them per tick. H also shows
 the desk's channels.
 
 A mapping with `slideshow: [images]` shows those images in turn inside its
@@ -90,6 +88,7 @@ import sys
 import threading
 
 import cv2
+import numpy as np
 import pygame
 import yaml
 
@@ -283,34 +282,20 @@ def crossfade(
     duration,
     clock,
     levels,
-    mix,
     overlay,
     pump,
 ):
-    """Fade between two live surfaces under the lamps. The getters are
-    re-evaluated every tick, so videos keep playing (and start playing)
-    during the fade; `levels` (called per tick) is what the desk asks.
-    `mix` is a pair of scratch surfaces: the blended stage and, when the
-    two stages' moldings are not the same surface, the blended molding."""
-    stage, molding = mix
-
-    def blend(into, src, dst, alpha):
-        dst.set_alpha(alpha)
-        into.blit(src, (0, 0))
-        into.blit(dst, (0, 0))
-        dst.set_alpha(None)
-        return into
-
+    """Fade between two live stages under the lamps, which mix them. The
+    getters are re-evaluated every tick, so videos keep playing (and start
+    playing) during the fade; `levels` (called per tick) is what the desk
+    asks."""
     if duration > 0:
         start = pygame.time.get_ticks()
         while True:
             t = (pygame.time.get_ticks() - start) / 1000.0 / duration
             if t >= 1.0 or pump():  # pump: True = cut this fade short
                 break
-            alpha = int(t * 255)
-            live = blend(stage, get_src(), get_dst(), alpha)
-            mold = mold_src if mold_src is mold_dst else blend(molding, mold_src, mold_dst, alpha)
-            lights.light(screen, live, mold, levels())
+            lights.light(screen, get_src(), mold_src, levels(), fade=(get_dst(), mold_dst, t))
             overlay()
             pygame.display.flip()
             clock.tick(60)
@@ -352,8 +337,6 @@ def run(
     clock = pygame.time.Clock()
     lights = lamps.Lamps(cfg)
     panel = faders.Faders(desk, pygame.font.SysFont('monospace', 16))
-    # scratch for the crossfades: the blended stage and the blended molding
-    mix = (pygame.Surface(cfg['canvas']).convert(), pygame.Surface(cfg['canvas']).convert())
 
     screen.fill((0, 0, 0))
     ui.draw_help(screen, font, ['preparing stages...'])
@@ -364,7 +347,6 @@ def run(
     images = {}  # stage index -> static render (video polygons black)
     alphas = {}  # stage index -> alpha layer, only for stages with video
     moldings = {}  # molding key -> molding-only render (splits pictures from molding)
-    surfaces = {}
     players = {}  # stage index -> video.StagePlayer, created lazily
     clip_pool = {}  # path -> VideoClip, shared so timelines survive stage changes
     idx = 0
@@ -447,29 +429,21 @@ def run(
     for i in list(images):  # what is ready now (all, when the cache matched)
         prepare(i)
 
-    def surface_for(i):
-        """Current surface of stage i (None while it is still rendering);
-        a stage with video composites its due frame in first."""
+    def frame_for(i):
+        """Current image of stage i (None while it is still rendering); a
+        stage with video composites its due frame in first."""
         player = get_player(i)
         if player is None:
             return None
-        frame, changed = player.tick(now())
-        if changed or i not in surfaces:
-            surfaces[i] = ui.to_surface(frame)
-        return surfaces[i]
+        return player.tick(now())[0]
 
-    molding_surfaces = {}  # molding key -> surface: stages with the same molding share one
-
-    def molding_surface(i):
-        """Surface with only stage i's molding; one object per distinct
+    def molding_for(i):
+        """Image with only stage i's molding; one object per distinct
         molding, so a crossfade can see that both sides have the same."""
         key = _molding_key(stages[i])
-        if key not in molding_surfaces:
-            if key == 'blackout':
-                molding_surfaces[key] = pygame.Surface(cfg['canvas']).convert()
-            else:
-                molding_surfaces[key] = ui.to_surface(moldings[key])
-        return molding_surfaces[key]
+        if key == 'blackout' and key not in moldings:
+            moldings[key] = np.zeros((cfg['canvas'][1], cfg['canvas'][0], 3), np.uint8)
+        return moldings[key]
 
     shown = None  # the levels last drawn: a static stage redraws when the desk moves
 
@@ -562,18 +536,16 @@ def run(
         nonlocal shown, last_shown
         shown = desk.levels()
         last_shown = now()
-        lights.light(
-            screen, surface_for(i), molding_surface(i), shown, dither=not _is_blackout(stages[i])
-        )
+        lights.light(screen, frame_for(i), molding_for(i), shown)
         overlay()
         pygame.display.flip()
 
     def wait_for(i):
         """Block until the background render delivers stage i."""
-        if surface_for(i) is None:
+        if frame_for(i) is None:
             ui.draw_help(screen, font, [f'waiting for stage {i + 1}...'])
             pygame.display.flip()
-            while surface_for(i) is None:
+            while frame_for(i) is None:
                 event = pygame.event.wait()
                 if event.type == pygame.QUIT:
                     return False
@@ -626,8 +598,8 @@ def run(
             dim(
                 screen,
                 lights,
-                lambda: surface_for(idx),
-                molding_surface(idx),
+                lambda: frame_for(idx),
+                molding_for(idx),
                 True,
                 fade,
                 clock,
@@ -639,8 +611,8 @@ def run(
             dim(
                 screen,
                 lights,
-                lambda: surface_for(new),
-                molding_surface(new),
+                lambda: frame_for(new),
+                molding_for(new),
                 False,
                 fade,
                 clock,
@@ -652,14 +624,13 @@ def run(
             crossfade(
                 screen,
                 lights,
-                lambda: surface_for(idx),
-                lambda: surface_for(new),
-                molding_surface(idx),
-                molding_surface(new),
+                lambda: frame_for(idx),
+                lambda: frame_for(new),
+                molding_for(idx),
+                molding_for(new),
                 fade,
                 clock,
                 desk.levels,
-                mix,
                 overlay,
                 pump,
             )
@@ -702,10 +673,12 @@ def run(
                 for k, oid in enumerate(desk.ids)
             }
         )
-        out = mix[0]  # not the screen: a dummy display may not be canvas-sized
+        out = pygame.Surface(
+            cfg['canvas']
+        )  # not the screen: a dummy display may not be canvas-sized
         t0 = pygame.time.get_ticks()
         for _ in range(20):
-            lights.light(out, surface_for(idx), molding_surface(idx), demo)
+            lights.light(out, frame_for(idx), molding_for(idx), demo)
         ms = (pygame.time.get_ticks() - t0) / 20.0
         pathlib.Path('renders').mkdir(exist_ok=True)
         pygame.image.save(out, 'renders/lamps.png')

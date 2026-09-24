@@ -1,16 +1,28 @@
 """The pretend lamps on the set: per object one on its canvas (image,
-video or fill colour) and one on its molding, dimmed per tick with pygame
-blend blits on the rendered stage, no re-rendering. The blackout fades
-(play.dim) and the light desk (laterna/dmx.py) both come through here.
+video or fill colour) and one on its molding, dimmed per tick on the
+rendered stage, no re-rendering. The blackout fades (play.dim), the
+crossfades between stages (play.crossfade) and the light desk
+(laterna/dmx.py) all come through here.
 
 Compositing: a stage's render is its canvases plus its molding, and the
 molding-only render (StageRenderer.render_molding) splits them: canvas =
 render - molding. Per object both parts are cut with its mask (its outer
 polygon, dilated 2 px so the anti-aliased rim comes along), multiplied by
-level x tint and summed onto black. All of it within the objects'
-bounding boxes: about 0.7 Mpx of blits per tick on the 2.3 Mpx canvas.
+level x tint and summed onto black. A crossfade mixes the two stages (and
+their moldings) first, in the same pass. All of it within the objects'
+bounding boxes (about 0.7 Mpx of the 2.3 Mpx canvas), in row bands spread
+over a few threads (numpy and OpenCV let go of the GIL while they work).
 
-Dimming (dim_fills): the lamps are tungsten theatre spots. The level
+Everything per tick is computed in float and rounded to 8 bits once, at
+the end, with a fixed noise of one output step added first (dithering).
+The renders are 8-bit but dithered themselves, so on average every pixel
+is right; rounding them again after an 8-bit multiply (as pygame blend
+blits do) breaks a gradient into contour rings, which grain can only
+partly hide. One rounding, dithered by exactly one step, leaves none, and
+the grain stays as fine as the render's own. Black stays black: the noise
+is below one step and the rounding goes down.
+
+Dimming (lamp_gain): the lamps are tungsten theatre spots. The level
 falls linearly in display values (a dimmer's fader) and the colour
 follows the filament: its colour temperature goes with V^0.42 while its
 light output goes with V^3.4, so CCT ~ L^0.12 in linear light (3200 K is
@@ -27,69 +39,56 @@ nothing is corrected twice and nothing clips.
 The render is also stored darker by the look's headroom (render.headroom),
 which the lamps give back here, so the clipping happens after the
 dimming: a spot that flattens into a plateau at full light shows its
-gradient again as it dims, instead of staying a flat patch. A multiplier
-above 1 does not fit in one blit (pygame multiplies by at most 1), so it
-is split into a full copy plus a weaker second one that is added on top.
+gradient again as it dims, instead of staying a flat patch.
 
-As a lamp dims its pool of light flattens (see _collapse and
+As a lamp dims its pool of light flattens (see Lamps._gains and
 render.spot_ratio, strength look.spot_collapse): a real spot keeps its
 beam while it dims, but in a theatre the spots die before the rest of
 the light, so the bright patch goes first and the picture ends up lit
 evenly before it goes out. Without it a dimmed spot keeps a flat, over
 bright centre, which is what the light desk's master fader shows.
-
-Deep dims are dithered (see _grain). Multiplying an 8-bit render by a
-small number leaves few output values, and without help the gradients
-break into contour rings: at a tenth of full light a flat band on a
-canvas ran 154 pixels wide. So before the multiply the part gets uniform
-noise of one output step, which makes the rounding land on either side
-in proportion, and the rings become invisible grain.
 """
 
 import functools
-import math
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
 import pygame
 
-from . import render, ui
+from . import render
 
 TUNGSTEN = 0.42 / 3.4  # CCT ~ (linear light) ^ this, for a filament
+BAND = 64  # rows per work item: fewer calls, still work for every thread
+THREADS = max(1, min(4, os.cpu_count() or 1))  # more only fight over memory
+
+_pool = None
+
+
+def _executor():
+    global _pool
+    if _pool is None:
+        _pool = ThreadPoolExecutor(THREADS, thread_name_prefix='lamps')
+    return _pool
 
 
 @functools.lru_cache(maxsize=8192)
-def grain_amplitude(fills):
-    """How much noise to add before multiplying by `fills`, per channel:
-    one output step is 1/m source values for a multiplier m, rounded up to
-    a power of two (so a fade reuses a handful of scaled patterns). 0 for a
-    channel whose steps are already one value or less: noise there would
-    only brighten it."""
-    first, second = fills
-    total = [(f + s) / 255.0 for f, s in zip(first, second or (0, 0, 0))]
-    amps = [min(1 << max(0, math.ceil(math.log2(1.0 / v))), 128) if v > 0 else 128 for v in total]
-    return tuple(0 if a < 2 else a for a in amps)
-
-
-@functools.lru_cache(maxsize=8192)
-def dim_fills(level, kelvin, white, amp):
-    """The lamp as fill colours to blit with: a tungsten lamp of `kelvin`
-    K at full, at `level` (1 = full, 0 = out), on a projector whose white
-    is `white` K, times the headroom `amp` (a gain per channel).
-
-    Returns (first, second): `first` multiplies the part, `second` is a
-    second copy to add on top for what did not fit in a multiplier of 1,
-    or None when one blit is enough.
-    """
+def lamp_gain(level, kelvin, white, amp):
+    """The lamp as a gain per channel (3,): a tungsten lamp of `kelvin` K
+    at full, at `level` (1 = full, 0 = out), on a projector whose white is
+    `white` K, times the headroom `amp` (a gain per channel). Above 1
+    where the headroom gives light back; the clipping comes after."""
     level = min(max(level, 0.0), 1.0)
     linear = level**render.GAMMA_TARGET
     k = kelvin * linear**TUNGSTEN if linear > 0 else 1000.0
     tint = render.white_gain(min(max(k, 1000.0), 40000.0), white)
-    m = [level * t * a for t, a in zip(tint, amp)]
-    first = tuple(int(round(255.0 * min(v, 1.0))) for v in m)
-    rest = [min(max(v - 1.0, 0.0), 1.0) for v in m]
-    second = tuple(int(round(255.0 * v)) for v in rest) if any(rest) else None
-    return first, second
+    return np.float32([level * t * a for t, a in zip(tint, amp)])
+
+
+def _as_surface(image):
+    """A pygame surface on an RGB uint8 image (h, w, 3), no copy."""
+    return pygame.image.frombuffer(np.ascontiguousarray(image), image.shape[1::-1], 'RGB')
 
 
 class Lamps:
@@ -97,111 +96,139 @@ class Lamps:
         self.white = float(render.look_settings(cfg)['white'])  # the projector's white
         self.amp = tuple(float(v) for v in render.headroom_gain(cfg))
         self.plain = all(abs(a - 1.0) < 1e-6 for a in self.amp)  # no headroom to give back
-        w, h = cfg['canvas']
-        # the dither pattern, fixed (grain that does not crawl) and the same
-        # in all three channels (noise in brightness, not in colour)
-        grain = (np.random.default_rng(1).random((h, w, 1)) * 256).astype(np.uint8)
-        self.grain = ui.to_surface(np.repeat(grain, 3, axis=2))
-        self.grains = {}  # amplitude -> the pattern scaled to it
         self.collapse = float(render.look_settings(cfg)['spot_collapse'])
-        self.flat = {}  # object id -> (picture, molding): the render x this
-        # is the same light without its spot (render.spot_ratio)
-        self.regions = []  # (object id, bounding rect, mask surface)
+        w, h = cfg['canvas']
+        # the dither: one output step, fixed (grain that does not crawl) and
+        # the same in all three channels (noise in brightness, not in colour)
+        self.noise = np.random.default_rng(1).random((h, w, 1), dtype=np.float32)
+        self.out = np.zeros((h, w, 3), np.uint8)  # black outside the objects
+        self.out_surface = _as_surface(self.out)
+        # per object, in its bounding box: the mask (h, w, 1) and the mask
+        # times what takes the spot out (render.spot_ratio), on the picture
+        # and on the molding (h, w, 3)
+        self.objects = {}  # object id -> (rows, cols, mask, picture ratio, molding ratio)
         for o in cfg['objects']:
             # projector pixels, like the renders the lamps get (keystone)
-            mask = render.projector_mask(cfg, o['id']).astype(np.uint8) * 255
+            mask = render.projector_mask(cfg, o['id']).astype(np.uint8)
             mask = cv2.dilate(mask, np.ones((5, 5), np.uint8))
             ys, xs = np.nonzero(mask)
             if not len(xs):
                 continue  # off the canvas
-            rect = pygame.Rect(xs.min(), ys.min(), xs.max() - xs.min() + 1, ys.max() - ys.min() + 1)
-            part = mask[rect.top : rect.bottom, rect.left : rect.right]
-            self.regions.append(
-                (o['id'], rect, ui.to_surface(np.repeat(part[:, :, None], 3, axis=2)))
-            )
-            gy, gx = np.mgrid[rect.top : rect.bottom, rect.left : rect.right]
+            rows, cols = slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1)
+            m = mask[rows, cols, None].astype(np.float32)
+            gy, gx = np.mgrid[rows, cols]
             gx, gy = render.to_plane(gx.ravel(), gy.ravel(), cfg)  # where the spots are
-            self.flat[o['id']] = tuple(
-                ui.to_surface(
-                    (
-                        render.spot_ratio(cfg, o, gx, gy, on_molding=m).reshape(
-                            rect.height, rect.width, 3
-                        )
-                        * 255.0
-                        + 0.5
-                    ).astype(np.uint8)
-                )
-                for m in (False, True)
+            ratios = [
+                render.spot_ratio(cfg, o, gx, gy, on_molding=on_molding)
+                .reshape(m.shape[0], m.shape[1], 3)
+                .astype(np.float32)
+                * m
+                for on_molding in (False, True)
+            ]
+            self.objects[o['id']] = (rows, cols, m, *ratios)
+        self.items = self._work_items(h)
+
+    def _work_items(self, h):
+        """The work, in bands of BAND rows: per band the stretches of columns
+        where objects' boxes overlap (usually one per object), each with
+        its objects as (id, slices into the object's arrays, slices into
+        the stretch)."""
+        items = []
+        for y0 in range(0, h, BAND):
+            y1 = min(y0 + BAND, h)
+            spans = sorted(
+                (c.start, c.stop, oid)
+                for oid, (r, c, *_) in self.objects.items()
+                if r.start < y1 and r.stop > y0
             )
+            groups = []  # [x0, x1, [ids]]
+            for x0, x1, oid in spans:
+                if groups and x0 < groups[-1][1]:
+                    groups[-1][1] = max(groups[-1][1], x1)
+                    groups[-1][2].append(oid)
+                else:
+                    groups.append([x0, x1, [oid]])
+            for x0, x1, ids in groups:
+                parts = []
+                for oid in ids:
+                    r, c = self.objects[oid][:2]
+                    a, b = max(r.start, y0), min(r.stop, y1)
+                    local = (
+                        slice(a - r.start, b - r.start),
+                        slice(c.start - c.start, c.stop - c.start),
+                    )
+                    inside = (slice(a - y0, b - y0), slice(c.start - x0, c.stop - x0))
+                    parts.append((oid, local, inside))
+                items.append((slice(y0, y1), slice(x0, x1), parts))
+        return items
 
-    def _grain(self, fills):
-        """(noise pattern, the half to take off again so it does not
-        brighten) for a multiplier of `fills`, or None when the steps are
-        small enough to need no dither."""
-        amp = grain_amplitude(fills)
-        if max(amp) < 2:
-            return None
-        if amp not in self.grains:
-            if len(self.grains) > 4:
-                self.grains.clear()
-            scaled = self.grain.copy()
-            scaled.fill(amp, special_flags=pygame.BLEND_RGB_MULT)
-            # the noise only adds, so half of it comes off again after:
-            # dither that brightens is dither you can see in a slow fade
-            self.grains[amp] = (scaled, tuple(a // 2 for a in amp))
-        return self.grains[amp]
+    def _gains(self, levels):
+        """Per object the per-channel factors of its two gains, or None when
+        it is out: the picture's gain is ratio x g1 + mask x g2, and the
+        molding's the same with its own ratio. As a lamp dims its pool
+        flattens: a share of the light keeps its spot, the rest does not
+        (ratio = the spot taken out), the share falling with the level."""
+        gains = {}
+        for oid, (canvas, mold, kelvin) in levels.objects.items():
+            if oid not in self.objects or (canvas <= 0 and mold <= 0):
+                continue
+            pair = []
+            for level in (canvas, mold):
+                if level <= 0:
+                    pair.append(None)
+                    continue
+                share = 1.0 - self.collapse * (1.0 - min(max(level, 0.0), 1.0))
+                g = lamp_gain(level, kelvin, self.white, self.amp)
+                pair.append(((1.0 - share) * g, share * g))
+            gains[oid] = pair
+        return gains
 
-    def _collapse(self, part, src, rect, flat, level):
-        """Flatten the pool in `part` (a copy of `src` over `rect`) as the
-        lamp dims: mix in the same light without its spot, `flat` being
-        what takes the spot out. Nothing to do at full level."""
-        share = 1.0 - self.collapse * (1.0 - min(max(level, 0.0), 1.0))
-        if share >= 1.0:
+    def _band(self, item, live, molding, fade, gains):
+        rows, cols, parts = item
+        if fade is None:
+            pic = live[rows, cols].astype(np.float32)
+            mold = molding[rows, cols].astype(np.float32)
+        else:
+            live_b, molding_b, t = fade
+            pic = cv2.addWeighted(
+                live[rows, cols], 1.0 - t, live_b[rows, cols], t, 0.0, dtype=cv2.CV_32F
+            )
+            if molding_b is molding:
+                mold = molding[rows, cols].astype(np.float32)
+            else:
+                mold = cv2.addWeighted(
+                    molding[rows, cols], 1.0 - t, molding_b[rows, cols], t, 0.0, dtype=cv2.CV_32F
+                )
+        pic -= mold  # the pictures alone
+        np.maximum(pic, 0.0, out=pic)
+        acc = np.empty(pic.shape, np.float32)
+        acc[:] = self.noise[rows, cols]
+        for oid, local, inside in parts:
+            if oid not in gains:
+                continue
+            _, _, m, ratio_pic, ratio_mold = self.objects[oid]
+            m = m[local]
+            for part, ratio, gain in (
+                (pic, ratio_pic, gains[oid][0]),
+                (mold, ratio_mold, gains[oid][1]),
+            ):
+                if gain is not None:
+                    g = ratio[local] * gain[0]
+                    g += m * gain[1]
+                    g *= part[inside]
+                    acc[inside] += g
+        np.clip(acc, 0.0, 255.0, out=acc)
+        self.out[rows, cols] = acc  # truncates: with the noise, a dithered rounding
+
+    def light(self, dst, live, molding, levels, fade=None):
+        """Draw `live` (the stage as rendered, videos composited: an RGB
+        uint8 image (h, w, 3)) onto the surface `dst` under the lamps at
+        `levels`; `molding` is the stage's molding-only render. `fade` =
+        (live, molding, t) of the stage being faded to, t running 0 -> 1:
+        the two are mixed before the light."""
+        if fade is None and self.plain and levels.is_full(self.white):
+            dst.blit(_as_surface(live), (0, 0))
             return
-        part.blit(flat, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
-        src.set_alpha(int(round(share * 255)))
-        part.blit(src, (0, 0), area=rect)
-        src.set_alpha(None)
-
-    def _add(self, dst, part, where, fills):
-        """Add `part` to `dst` at `where`, multiplied by `fills` (one blit,
-        or two when the multiplier is above 1)."""
-        first, second = fills
-        if second is not None:
-            extra = part.copy()
-            extra.fill(second, special_flags=pygame.BLEND_RGB_MULT)
-        part.fill(first, special_flags=pygame.BLEND_RGB_MULT)
-        dst.blit(part, where, special_flags=pygame.BLEND_RGB_ADD)
-        if second is not None:
-            dst.blit(extra, where, special_flags=pygame.BLEND_RGB_ADD)
-
-    def light(self, dst, live, molding, levels, dither=True):
-        """Draw `live` (the stage as rendered, videos composited) onto
-        `dst` under the lamps at `levels`; `molding` is the stage's
-        molding-only render. `dither` off for an all-black stage (a
-        blackout), whose canvas would otherwise pick up the grain."""
-        if self.plain and levels.is_full(self.white):
-            dst.blit(live, (0, 0))
-            return
-        dst.fill((0, 0, 0))
-        for oid, rect, mask in self.regions:
-            canvas, mold, kelvin = levels.objects.get(oid, (1.0, 1.0, self.white))
-            if canvas > 0:
-                fills = dim_fills(canvas, kelvin, self.white, self.amp)
-                part = live.subsurface(rect).copy()
-                self._collapse(part, live, rect, self.flat[oid][0], canvas)
-                part.blit(molding, (0, 0), area=rect, special_flags=pygame.BLEND_RGB_SUB)
-                # the grain goes on the picture before the mask cuts it out,
-                # so it never lands outside the frame; the molding is a
-                # narrow shaded band and needs none
-                grain = self._grain(fills) if dither else None
-                if grain is not None:
-                    part.blit(grain[0], (0, 0), area=rect, special_flags=pygame.BLEND_RGB_ADD)
-                    part.fill(grain[1], special_flags=pygame.BLEND_RGB_SUB)
-                part.blit(mask, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
-                self._add(dst, part, rect.topleft, fills)
-            if mold > 0:
-                part = molding.subsurface(rect).copy()
-                self._collapse(part, molding, rect, self.flat[oid][1], mold)
-                part.blit(mask, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
-                self._add(dst, part, rect.topleft, dim_fills(mold, kelvin, self.white, self.amp))
+        gains = self._gains(levels)
+        list(_executor().map(lambda item: self._band(item, live, molding, fade, gains), self.items))
+        dst.blit(self.out_surface, (0, 0))
