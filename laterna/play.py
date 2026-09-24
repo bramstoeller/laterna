@@ -16,12 +16,10 @@ Keys:
 
 A small bar in the top right corner tells the operator what the show is
 doing: red while a transition runs, orange while a stage's hold runs,
-dim blue while that hold stands still in the dark (see below: it waits
-for the desk, however long the hold), green when it waits for a key. It
-is a row of 2 x 2 px blocks 2 px apart: one in the corner plus, darker,
-one for every whole second left (rounded up), so red and orange lose a
-block per second towards the corner; blue and green are just the corner
-block. A countdown too long to fit in a
+green when it waits for a key. It is a row of 2 x 2 px blocks 2 px apart:
+one in the corner plus, darker, one for every whole second left (rounded
+up), so red and orange lose a block per second towards the corner; green
+is just the corner block. A countdown too long to fit in a
 quarter of the width goes to 2, 3, 5, 10, 15, 20, 30 seconds a block and
 then whole minutes; the step follows the whole stretch being counted, so
 it never changes halfway and the bar shrinks smoothly. The left and the
@@ -44,14 +42,6 @@ of scenes.yaml) moves on to the next stage by itself that long after its
 fade-in finished; a key press still works earlier. Without a hold the
 stage waits for a key. Its `transition_time` (or the global one) is the
 fade to the next stage.
-
-Timers only run in the light. While the desk has every canvas dark
-(canvas x master below half a pixel value) a stage's hold stands still,
-and so does the clock of every slideshow and video whose canvases are
-all dark: nothing moves on unseen, and it all carries on where it was
-once the light comes up. So a stage reached in the dark (a cut from the
-dimmed stage before it) starts its hold when the desk fades it in.
-Without a desk the light is always full and the timers just run.
 
 Transitions are crossfades. The duration comes from `- fade: <seconds>`
 entries between stages in scenes.yaml; where absent, the global `fade`
@@ -112,7 +102,6 @@ STATE_PITCH = 4  # block + gap
 # from the desk without the audience noticing
 STATE_FADE = ((128, 0, 0), (64, 0, 0))  # a transition runs
 STATE_HOLD = ((128, 64, 0), (64, 32, 0))  # a stage hold runs
-STATE_DARK = ((0, 0, 32), (0, 0, 32))  # the hold stands still in the dark: one block
 STATE_KEY = ((0, 128, 0), (0, 64, 0))  # waiting for a key
 STATE_CLIP = ((64, 64, 64), (64, 64, 64))  # the clips' own bars, left, flat grey
 BAR_TICK_MS = 250  # redraw interval during a hold (1 px of bar)
@@ -128,7 +117,6 @@ STEP_KEYS = {
     pygame.K_LEFT: -1,
 }
 DOUBLE_PRESS = 0.5
-DARK = 0.5 / 255.0  # a canvas level below this gives no light (half a pixel value)
 
 
 def bar_unit(span, max_blocks):
@@ -515,10 +503,7 @@ def run(
         if transition_until is not None:  # the stage, top right
             bar(0, STATE_FADE, transition_until - now(), transition_span)
         elif hold_until is not None:
-            if hold_dark:
-                bar(0, STATE_DARK, 0.0)
-            else:
-                bar(0, STATE_HOLD, hold_until - now(), stages[idx].get('hold') or 0.0)
+            bar(0, STATE_HOLD, hold_until - now(), stages[idx].get('hold') or 0.0)
         else:
             bar(0, STATE_KEY, 0.0)
         clips = clip_states(idx)  # the clips, top left, on one shared step
@@ -567,8 +552,6 @@ def run(
         return True
 
     hold_until = None  # wall-clock seconds at which the stage's hold ends
-    hold_dark = False  # the hold stands still: every canvas is dark
-    last_tick = now()  # when the timers were last looked after (tick_clocks)
     last_shown = 0.0  # when show() last drew (the bar's redraw during a hold)
     transition_until = None  # ... at which the running fade ends (the state bar)
     transition_span = 0.0  # how long that fade is, for the bar's step
@@ -577,24 +560,9 @@ def run(
 
     def arm_hold():
         """Start the current stage's hold, if it has one and a next stage."""
-        nonlocal hold_until, last_tick
+        nonlocal hold_until
         hold = stages[idx].get('hold')
         hold_until = now() + hold if hold is not None and idx + 1 < total else None
-        last_tick = now()
-
-    def tick_clocks():
-        """Hold the timers back while it is dark: the stage's hold when every
-        canvas is dark, a clip's clock when its own canvases are."""
-        nonlocal hold_until, hold_dark, last_tick
-        dt, last_tick = now() - last_tick, now()
-        if not desk.on:
-            return
-        lit = {oid for oid, (canvas, _, _) in desk.levels().objects.items() if canvas >= DARK}
-        hold_dark = hold_until is not None and not lit
-        if hold_dark:
-            hold_until += dt
-        if idx in players:
-            players[idx].hold_dark(dt, lit)
 
     def hold_wait_ms():
         """Milliseconds to sleep on the event queue: to the end of the hold,
@@ -776,7 +744,6 @@ def run(
             # sleep on the event queue, at most until the stage's hold ends
             handle(pygame.event.wait(hold_wait_ms()))
         if running:
-            tick_clocks()
             check_hold()
             if hold_until is not None and now() - last_shown >= BAR_TICK_MS / 1000.0:
                 show(idx)  # the state bar shrinks with the hold
