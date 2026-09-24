@@ -654,8 +654,9 @@ def _spot_gain(cfg, obj, xs, ys, ss, on_images=False, on_fill=False, on_molding=
     - gaussian: a soft elliptical pool, like a spot far away in the rig;
     - cone: a lamp `distance` x object width in front of the surface at `position`,
       aimed at `aim`, with a beam of half-angle `angle` and a penumbra of
-      `softness` x angle: light fans out from the lamp, is brightest where
-      the axis hits (normalised to 1 there), dims with the incidence angle
+      `softness` x angle: light fans out from the lamp, normalised to 1 at
+      its brightest point on the object (nearest the lamp, not where the
+      axis hits, when the lamp is close), dims with the incidence angle
       and with distance^falloff, and is dark behind the lamp. Closed form
       per pixel, no ray casting.
 
@@ -669,23 +670,23 @@ def _spot_gain(cfg, obj, xs, ys, ss, on_images=False, on_fill=False, on_molding=
         strength *= float(spot['fill'])
     if strength <= 0:
         return None
-    pts = np.vstack(polys_px(cfg, [obj['id']], ss))
+    polys = polys_px(cfg, [obj['id']], ss)
+    pts = np.vstack(polys)
     x0, y0 = pts.min(axis=0)
     x1, y1 = pts.max(axis=0)
     w, h = max(x1 - x0, 1.0), max(y1 - y0, 1.0)
     px, py = (float(v) for v in spot['position'])
     cx, cy = x0 + px * w, y1 - py * h  # y down
     if spot.get('type', 'gaussian') == 'cone':
-        g = _cone_light(
+        lamp = (
             spot,
-            xs,
-            ys,
             cx,
             cy,
             x0 + float(spot['aim'][0]) * w,
             y1 - float(spot['aim'][1]) * h,
             float(spot['distance']) * w,
         )
+        g = _cone_light(xs, ys, *lamp) / _cone_peak(polys, *lamp)
     else:
         sx, sy = (max(float(v), 1e-3) for v in spot['size'])
         g = np.exp(-0.5 * (((xs - cx) / (sx * w)) ** 2 + ((ys - cy) / (sy * h)) ** 2))
@@ -696,10 +697,27 @@ def _spot_gain(cfg, obj, xs, ys, ss, on_images=False, on_fill=False, on_molding=
     )
 
 
-def _cone_light(spot, xs, ys, lx, ly, ax, ay, d):
-    """Relative illuminance (0..1) on the surface plane from a lamp at
-    (lx, ly) hanging `d` px in front of it, aimed at (ax, ay) — see
-    _spot_gain. 1 where the axis hits the surface."""
+def _cone_peak(polys, spot, lx, ly, ax, ay, d):
+    """The brightest _cone_light on the object (its screen polygons):
+    the maximum over a fixed grid inside them, so every
+    caller (fill, images, video, the lamps' spot_ratio) divides by the
+    same number whatever pixels it asks for."""
+    pts = np.vstack(polys)
+    x0, y0 = pts.min(axis=0)
+    x1, y1 = pts.max(axis=0)
+    n = 256
+    scale = (n - 1) / max(x1 - x0, y1 - y0, 1.0)
+    mask = np.zeros((n, n), np.uint8)
+    cv2.fillPoly(mask, [np.round((p - (x0, y0)) * scale).astype(np.int32) for p in polys], 1)
+    gy, gx = np.nonzero(mask)
+    e = _cone_light(gx / scale + x0, gy / scale + y0, spot, lx, ly, ax, ay, d)
+    return max(float(e.max()), 1e-6) if e.size else 1.0
+
+
+def _cone_light(xs, ys, spot, lx, ly, ax, ay, d):
+    """Relative illuminance on the surface plane from a lamp at (lx, ly)
+    hanging `d` px in front of it, aimed at (ax, ay) — see _spot_gain.
+    1 where the axis hits the surface; more closer to the lamp."""
     vx, vy = xs - lx, ys - ly
     r = np.sqrt(vx * vx + vy * vy + d * d)
     bx, by = ax - lx, ay - ly
@@ -713,7 +731,7 @@ def _cone_light(spot, xs, ys, lx, ly, ax, ay, d):
     cos_inc = d / r  # incidence on the plane
     falloff = float(spot['falloff'])
     e = beam * cos_inc * (r0 / r) ** falloff
-    return np.clip(e / (d / r0), 0.0, 1.0)  # 1 at the aim point
+    return e / (d / r0)  # 1 at the aim point
 
 
 def image_gain_at(cfg, ids, xs, ys, ss=1):
