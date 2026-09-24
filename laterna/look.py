@@ -47,7 +47,9 @@ Other:
 """
 
 import argparse
+import collections
 import copy
+import time
 
 import numpy as np
 import pygame
@@ -251,6 +253,7 @@ def run(
     show_help = True
     message = ''
     surface = molding = None
+    ticks = collections.deque(maxlen=60)  # (time, lamps ms) of the last frames drawn
 
     def on_desk_page():
         all_pages = pages(cfg['look'])
@@ -271,6 +274,7 @@ def run(
         up/down to slide a fader)."""
         nonlocal page, selected
         page, selected = new, 0
+        ticks.clear()  # the frame rate of this page only
         if on_desk_page() != panel.visible:
             panel.toggle()
         if on_desk_page():
@@ -283,12 +287,20 @@ def run(
         # the base pages: full light at the look's colour temperature; the
         # desk page: whatever the desk (or the faders) ask
         levels = desk.levels() if on_desk_page() else dmx.Levels.full(desk.kelvin, desk.ids)
+        t0 = time.perf_counter()
         lights.light(screen, surface, molding, levels)
+        ticks.append((t0, (time.perf_counter() - t0) * 1000.0))
         top = panel.draw(screen) if panel.visible else 0
         if on_desk_page():
-            # the faders speak for themselves: no menu here, only a message
-            if message:
-                ui.draw_help(screen, font, [message], top=top + 20)
+            # the faders speak for themselves: no menu here, only the frame
+            # rate (with what the lamps take of each frame) and a message
+            lines = [message] if message else []
+            if len(ticks) > 1 and ticks[-1][0] > ticks[0][0]:
+                fps = (len(ticks) - 1) / (ticks[-1][0] - ticks[0][0])
+                lamps_ms = sum(ms for _, ms in ticks) / len(ticks)
+                lines.insert(0, f'{fps:.0f} fps   lamps {lamps_ms:.1f} ms per frame')
+            if lines:
+                ui.draw_help(screen, font, lines, top=top + 20)
         elif show_help:
             lines = [
                 f'view {idx + 1}/{len(stages)}: {stages[idx].get("name", "?")}'
