@@ -1215,8 +1215,9 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             M,
             y + 10,
             'Channel = address + offset - 1. Objects sharing a channel dim together. '
-            'cct: 0 and 128 = look.temperature, 1-128 from the warm end, 128-255 to the cool end '
-            '(dmx.cct). smooth: time constants up / down in seconds.',
+            'cct: 128 = look.temperature, 0-128 from the warm end, 128-255 to the cool end '
+            '(dmx.cct). A channel kept at 0 since the start is full (cct 128) until it moves. '
+            'smooth: time constants up / down in seconds.',
             8,
             420,
             color=MUTED,

@@ -6,9 +6,8 @@ The desk sees the projection as one fixture at `address` (config.yaml
 
   master        everything (0 = black)
   cct           colour temperature of the light at full, for every lamp:
-                0 and 128 = look.temperature (0 is the safe default of an
-                unpatched channel), 1..128 = from `cct[0]` (warm) up to
-                it, 128..255 = from it to `cct[1]` (cool), each half
+                128 = look.temperature, 0..128 = from `cct[0]` (warm) up
+                to it, 128..255 = from it to `cct[1]` (cool), each half
                 linear in mired. The projector's white is 6500 K: above
                 that the light goes bluish, below it warm. Dimming reddens
                 from there like a tungsten filament (laterna/lamps.py)
@@ -52,9 +51,12 @@ what is left. The colour temperature is filtered along (up = cooler),
 so it never jumps either.
 
 Until the desk's first frame the levels are full, so the show also runs
-with nothing connected; from then on the desk rules (faded to from
-full), and when the signal stops the last frame holds (a DMX receiver
-never blacks out by itself).
+with nothing connected. A channel the desk keeps at 0 from the start
+counts as untouched and stays full too (cct: 128), so a desk that boots
+with everything at 0 does not black the show out; once a channel has
+been above 0 the desk rules it, 0 included (faded to from full). When
+the signal stops the last frame holds (a DMX receiver never blacks out
+by itself).
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
 that the cable and the patch are right.
 """
@@ -239,15 +241,15 @@ def channel_labels(cfg, channels):
 
 
 def cct_kelvin(value, warm_cool, base):
-    """Colour temperature of the light at full for the cct channel: 0 and
-    128 = `base` (look.temperature); 1..128 runs from `warm` to base,
-    128..255 from base to `cool`, each linear in mired (1e6 / K), about
-    how the eye scales it."""
-    if not value:
+    """Colour temperature of the light at full for the cct channel: 128 =
+    `base` (look.temperature), None (no cct channel) too; 0..128 runs from
+    `warm` to base, 128..255 from base to `cool`, each linear in mired
+    (1e6 / K), about how the eye scales it."""
+    if value is None:
         return base
     warm, cool = warm_cool
     if value <= 128:
-        mired = 1e6 / warm + (1e6 / base - 1e6 / warm) * (value - 1) / 127.0
+        mired = 1e6 / warm + (1e6 / base - 1e6 / warm) * value / 128.0
     else:
         mired = 1e6 / base + (1e6 / cool - 1e6 / base) * (value - 128) / 127.0
     return 1e6 / mired
@@ -662,7 +664,8 @@ def open_receiver(dmx):
 class Desk:
     """The light desk's view of the projection: the fixture's channels,
     decoded to Levels. `on` is False for dmx.source off; levels() then are
-    full, and so they are until the desk's first frame."""
+    full, and so they are until the desk's first frame; a channel stays
+    at its initial value while the desk keeps it at 0 (see `touched`)."""
 
     def __init__(self, cfg, receiver=None):
         from . import render
@@ -675,7 +678,7 @@ class Desk:
         self.receiver = receiver if receiver is not None else open_receiver(self.settings)
         # the offsets in use; before the desk's first frame (or without a
         # desk) the channels stand at "full light, as rendered" (cct 128,
-        # the middle of the fader, is 3200 K like 0 is), and the
+        # the middle of the fader, is look.temperature), and the
         # filter starts there, so the first frame is faded to, not jumped to
         self.offsets = sorted({off for off, _ in self.labels})
         self.offset_labels = offset_labels(cfg, self.channels)
@@ -686,6 +689,9 @@ class Desk:
             Smooth(self.settings['smooth'], self.initial) if self.settings['smooth'] else None
         )
         self.override = {}  # offset -> (value by hand, the desk's value it took over from)
+        # the offsets the desk has sent above 0; until then its 0 means
+        # "not touched yet" (a desk booting at 0) and the initial value holds
+        self.touched = set()
 
     @property
     def on(self):
@@ -702,13 +708,20 @@ class Desk:
 
     def targets(self):
         """What the desk sends, by offset (the initial full light before
-        its first frame, or without a desk)."""
+        its first frame, or without a desk, and for a channel it has kept
+        at 0 so far)."""
+        targets = dict(self.initial)
         if self.receiver is not None:
             data, frames = self.receiver.snapshot()
             if frames:
                 first = self.settings['address'] - 1
-                return {off: float(data[first + off - 1]) for off in self.offsets}
-        return dict(self.initial)
+                for off in self.offsets:
+                    value = data[first + off - 1]
+                    if value:
+                        self.touched.add(off)
+                    if off in self.touched:
+                        targets[off] = float(value)
+        return targets
 
     def set_override(self, offset, value):
         """Take a channel over by hand (the on-screen faders): it holds
