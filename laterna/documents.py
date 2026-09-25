@@ -370,12 +370,12 @@ def desk_steps(cfg, scenes, facts):
     ]
 
 
-def _strip(doc, y, scenes, facts, desk):
+def _strip(doc, y, scenes, facts, desk, on_page=None):
     """All scenes as numbered cells across the page, a blackout framed in
     black, with an icon for a slideshow or a video; the step into each is
     drawn in the gap before it: a green line = on a key, blue = on a key or
     by the desk (a blackout on either side, see play.py), an orange wedge =
-    by itself."""
+    by itself. on_page = (first, last): a bar under the scenes of this page."""
     n = len(scenes)
     gap = 5 if n <= 40 else (3 if n <= 80 else 2)
     cell = (doc.w - 2 * M - gap * (n - 1)) / n
@@ -402,6 +402,10 @@ def _strip(doc, y, scenes, facts, desk):
         if cell >= 30:
             for k, kind in enumerate(_scene_kinds(scenes[j])):
                 _media_icon(doc, x + cell - 10 - 9 * k, y + 4.5, kind, MUTED)
+    if on_page:
+        first, last = on_page
+        x0, x1 = M + first * (cell + gap), M + last * (cell + gap) + cell
+        doc.rect(x0, y + 16.5, x1 - x0, 2, fill=MUTED)
     return y + 14
 
 
@@ -553,7 +557,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
 
     def head(first, last):
         _page_head(doc, tr('run.title'))
-        _strip(doc, 40, scenes, facts, desk)
+        _strip(doc, 40, scenes, facts, desk, on_page=(first, last))
         y = 72
         cols = [
             (X_NUM, '#'),
