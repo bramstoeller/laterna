@@ -423,11 +423,11 @@ def _strip_legend(doc, x, y):
         x += doc.text(x, y, tr(key), 7, color=MUTED) + 14
 
 
-def _page_head(doc, title, subtitle):
+def _page_head(doc, title):
+    """The show and the document, small, top left: what the page is of."""
     head = doc.show.upper()
     doc.text(M, 30, head, 8, True, GOLD)
     doc.text(M + doc.width(head, 8, True) + 10, 30, title, 8, color=MUTED)
-    doc.text(doc.w - M, 30, subtitle, 8, color=MUTED, align='right')
 
 
 LEFT, RIGHT = '<left>', '<right>'  # arrow keys, drawn (Doc.key)
@@ -463,7 +463,7 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
     doc = Doc(
         path,
         tr('run.title'),
-        tr('run.footer', show=show, source=source, date=today()),
+        tr('run.footer', source=source, date=today()),
         show=show,
     )
     thumbs = {}
@@ -495,17 +495,8 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
         return h
 
     # --- cover ------------------------------------------------------------
-    _page_head(doc, tr('run.title'), source)
-    doc.text(M, 84, tr('run.title'), 28, True)
-    keys = sum(f['entry'] == 'key' for f in facts)
-    doc.text(
-        M,
-        104,
-        tr('run.summary', n=n, keys=keys, auto=n - keys - 1),
-        10,
-        color=MUTED,
-    )
-    y = 118
+    _page_head(doc, tr('run.title'))
+    y = 44
     if description:
         y = doc.para(M, y + 4, description, 9, doc.w - 2 * M) + 2
     y = _strip(doc, y, scenes, facts)
@@ -560,10 +551,9 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
     names = {o['id']: str(o.get('name', o['id'])) for o in objects}
 
     def head(first, last):
-        _page_head(doc, tr('run.title'), source)
+        _page_head(doc, tr('run.title'))
         _strip(doc, 40, scenes, facts)
-        doc.text(M, 80, tr('run.cue_list', first=first + 1, last=last + 1, n=n), 14, True)
-        y = 98
+        y = 72
         cols = [
             (X_NUM, '#'),
             (X_PIC, tr('col.picture')),
@@ -599,12 +589,12 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
         return h
 
     bottom = doc.h - 34
-    pages, current, y = [], [], 104
+    pages, current, y = [], [], 78
     for i in range(n):
         h = row_height(i)
         if current and y + h > bottom:
             pages.append(current)
-            current, y = [], 104
+            current, y = [], 78
         current.append(i)
         y += h
     pages.append(current)
@@ -857,7 +847,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     doc = Doc(
         path,
         tr('config.title'),
-        tr('config.footer', show=show, source=source, date=today()),
+        tr('config.footer', source=source, date=today()),
         show=show,
     )
     mmpp = float(cfg['scale_mm_per_px'])
@@ -867,7 +857,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     crop_box = extras['crop']
 
     def head(title):
-        _page_head(doc, tr('config.title'), source)
+        _page_head(doc, tr('config.title'))
         doc.line(M, 38, doc.w - M, 38)
         doc.text(M, 64, title, 18, True)
 
@@ -929,13 +919,6 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         7,
         520,
         color=MUTED,
-    )
-    doc.para(
-        M,
-        458,
-        tr('config.transformation'),
-        8,
-        520,
     )
 
     rx = M + 545
@@ -1129,14 +1112,6 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         7,
         dw,
         color=MUTED,
-    )
-    headroom = extras['headroom']
-    doc.para(
-        M,
-        80 + dh + 36,
-        tr('config.headroom_note', h=num(headroom, 2)),
-        8,
-        dw,
     )
     rx = M + 430
     y = 90

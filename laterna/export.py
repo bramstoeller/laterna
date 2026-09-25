@@ -219,7 +219,6 @@ def config_renders(cfg, renderer, scenes, gain):
     extras = {
         'look': copy.deepcopy(look),
         'crop': box,
-        'headroom': render.headroom(cfg),
         'white_spot': lit(renderer.render(WHITE_VIEW), gain),
         'scene_spot': lit(renderer.render(example), gain) if example else None,
         'scene_name': example.get('name', '?') if example else None,

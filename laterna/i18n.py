@@ -37,12 +37,8 @@ TEXTS = {
         'nl': 'Draaiboek',
     },
     'run.footer': {
-        'en': '{show} · run sheet · {source} · generated {date}',
-        'nl': '{show} · draaiboek · {source} · gemaakt {date}',
-    },
-    'run.summary': {
-        'en': '{n} scenes · {keys} on a key, {auto} by themselves · numbered like the L label of the presentation (scene k/{n})',
-        'nl': '{n} scènes · {keys} op een toets, {auto} vanzelf · genummerd zoals het L-label van de voorstelling (scène k/{n})',
+        'en': '{source} · generated {date}',
+        'nl': '{source} · gemaakt {date}',
     },
     'run.keys': {
         'en': 'Keys',
@@ -69,8 +65,8 @@ TEXTS = {
         'nl': 'stoppen, terug naar het menu',
     },
     'run.blocks': {
-        'en': 'State blocks, top right of the projection (P: half, full, off)',
-        'nl': 'Statusblokjes, rechtsboven in de projectie (P: half, vol, uit)',
+        'en': 'State blocks, top right of the projection',
+        'nl': 'Statusblokjes, rechtsboven in de projectie',
     },
     'block.red': {
         'en': 'red',
@@ -131,10 +127,6 @@ TEXTS = {
     'run.columns_note': {
         'en': 'IN: how the scene is reached and its fade. STANDS: what it does until the next step. t = seconds from the last key press until the scene is fully in. Grey text = the same as the scene before. A row of small pictures = the combinations of a slideshow, with the moment each comes up after entering.',
         'nl': 'IN: hoe de scène bereikt wordt en haar fade. STAAT: wat ze doet tot de volgende stap. t = seconden van de laatste toets tot de scène helemaal in beeld is. Grijze tekst = hetzelfde als de scène ervoor. Een rij kleine beelden = de combinaties van een slideshow, met het moment waarop elk verschijnt na binnenkomst.',
-    },
-    'run.cue_list': {
-        'en': 'Cue list · scenes {first}-{last} of {n}',
-        'nl': 'Cuelijst · scènes {first}-{last} van {n}',
     },
     'col.picture': {
         'en': 'picture',
@@ -217,8 +209,8 @@ TEXTS = {
         'nl': 'Configuratie',
     },
     'config.footer': {
-        'en': '{show} · configuration · {source} · generated {date}',
-        'nl': '{show} · configuratie · {source} · gemaakt {date}',
+        'en': '{source} · generated {date}',
+        'nl': '{source} · gemaakt {date}',
     },
     'config.setup': {
         'en': 'Set-up and global calibration',
@@ -239,10 +231,6 @@ TEXTS = {
     'config.setup_note': {
         'en': 'Black = the whole projector picture on the frame plane at the set scale. Red dot = origin of an object (middle of its bottom plank). Light numbers between frames = the gap, wood to wood, in mm.',
         'nl': 'Zwart = het hele beamerbeeld op het framevlak bij de ingestelde schaal. Rode stip = oorsprong van een object (midden van de onderplank). Lichte getallen tussen de lijsten = de tussenruimte, hout tot hout, in mm.',
-    },
-    'config.transformation': {
-        'en': 'Transformation: local (frame.inner, mm) x scale, rotated, + origin = world mm; then the global rotation, - image_offset, / scale_mm_per_px = projector pixels (x from the middle, y up from the bottom edge). The inner corners are local, so the global alignment (step 3) leaves the shape calibration (step 4) intact.',
-        'nl': 'Transformatie: lokaal (frame.inner, mm) x scale, gedraaid, + origin = wereld-mm; dan de globale rotatie, - image_offset, / scale_mm_per_px = beamerpixels (x vanaf het midden, y omhoog vanaf de onderrand). De binnenhoeken zijn lokaal, dus de globale uitlijning (stap 3) laat de vormkalibratie (stap 4) intact.',
     },
     'config.global': {
         'en': 'Global',
@@ -331,10 +319,6 @@ TEXTS = {
     'config.molding_note': {
         'en': 'Render without pictures (the fill) at full light, top of the largest frame: the profile, the fixed light direction and the shadow the molding throws on the canvas.',
         'nl': 'Render zonder beelden (de vulling) bij vol licht, bovenkant van de grootste lijst: het profiel, de vaste lichtrichting en de schaduw die de lijst op het doek werpt.',
-    },
-    'config.headroom_note': {
-        'en': 'Brightness above 1 asks for more light than the projector has, so the render is stored {h} x darker and the lamps give that back: the clipping comes after the dimming, and a dimmed spot keeps its gradient. At full light the picture is the same.',
-        'nl': 'Helderheid boven 1 vraagt meer licht dan de beamer heeft, dus de render wordt {h} x donkerder opgeslagen en de lampen geven dat terug: het afkappen komt na het dimmen, en een gedimde spot houdt zijn verloop. Bij vol licht is het beeld hetzelfde.',
     },
     'look.molding': {
         'en': 'brightness of the molding',
