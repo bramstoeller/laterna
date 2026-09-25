@@ -425,10 +425,11 @@ def _media_kinds(scenes):
     }
 
 
-def _strip_legend(doc, x, y, desk=True, kinds=('slideshow', 'video')):
+def _strip_legend(doc, x, y, desk=True, kinds=('slideshow', 'video'), key_only=False):
     """What the strip's marks mean, drawn as they are, on one line from x
     (baseline y); only what the show has: `desk` False leaves the desk's
-    steps out (no desk), `kinds` the media icons."""
+    steps out (no desk), `kinds` the media icons, `key_only` adds the warning
+    of a step only a key takes (with a desk: where the operator acts)."""
     for mark, key in (
         ('key', 'legend.step_key'),
         ('desk', 'legend.step_desk'),
@@ -436,7 +437,13 @@ def _strip_legend(doc, x, y, desk=True, kinds=('slideshow', 'video')):
         ('blackout', 'legend.blackout'),
         ('slideshow', 'legend.slideshow'),
         ('video', 'legend.video'),
+        ('warning', 'legend.key_only'),
     ):
+        if mark == 'warning':
+            if key_only:
+                _warning(doc, x, y - 9, 10)
+                x += 14 + doc.text(x + 14, y, tr(key), 8, color=MUTED) + 16
+            continue
         if (mark == 'desk' and not desk) or (mark in ('slideshow', 'video') and mark not in kinds):
             continue
         if mark in ('key', 'desk', 'auto'):
@@ -520,7 +527,8 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     _page_head(doc, tr('run.title'))
     y = _strip(doc, 40, scenes, facts, desk)  # at the top, as on the other pages
     kinds = _media_kinds(scenes)
-    _strip_legend(doc, M, y + 22, any(desk), kinds)
+    key_only = any(desk) and any(f['entry'] == 'key' and not d for f, d in zip(facts[1:], desk[1:]))
+    _strip_legend(doc, M, y + 22, any(desk), kinds, key_only)
     y += 40
     doc.line(M, y, doc.w - M, y)
     if description:

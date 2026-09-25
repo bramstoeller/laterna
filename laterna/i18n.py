@@ -492,6 +492,10 @@ TEXTS = {
         'en': 'or DMX',
         'nl': 'of DMX',
     },
+    'legend.key_only': {
+        'en': 'only on a key: the operator presses',
+        'nl': 'alleen op een toets: de operator drukt',
+    },
 }
 
 
