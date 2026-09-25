@@ -488,9 +488,9 @@ TEXTS = {
         'en': 'A row of small pictures = the combinations of a slideshow.',
         'nl': 'Een rij kleine beelden = de combinaties van een slideshow.',
     },
-    'run.fade_or_dmx': {
-        'en': 'fade-out {t} or DMX',
-        'nl': 'fade-out {t} of DMX',
+    'run.or_dmx': {
+        'en': 'or DMX',
+        'nl': 'of DMX',
     },
 }
 

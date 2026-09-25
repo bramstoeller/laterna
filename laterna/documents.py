@@ -646,8 +646,9 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
                 w = doc.label(X_IN, y + 7, label, ENTRY[nxt['entry']][1])
                 if desk[i + 1]:  # the desk can take this step too
                     doc.label(X_IN + w + 3, y + 7, 'DMX', DESK)
-                fade = tr('run.fade_or_dmx' if desk[i + 1] else 'run.fade', t=secs(nxt['fade']))
-                doc.text(X_IN, y + 29, fade, 8, color=MUTED)
+                doc.text(X_IN, y + 29, tr('run.fade', t=secs(nxt['fade'])), 8, color=MUTED)
+                if desk[i + 1]:
+                    doc.text(X_IN, y + 39, tr('run.or_dmx'), 8, color=MUTED)
             # objects
             now = object_contents(st, cfg)
             before = object_contents(scenes[i - 1], cfg) if i else {}
