@@ -53,8 +53,12 @@ TEXTS = {
         'nl': 'vorige scène',
     },
     'key.twice_does': {
-        'en': 'twice quickly during a fade: skips it, so quick presses step straight through',
-        'nl': '2x snel tijdens een fade: slaat hem over, dus snel drukken stapt er direct doorheen',
+        'en': 'twice quickly during a fade: skips it and steps on in that direction (back after a fade on: the scene before it)',
+        'nl': '2x snel tijdens een fade: slaat hem over en stapt door in die richting (terug na een fade vooruit: de scène ervoor)',
+    },
+    'word.or': {
+        'en': 'or',
+        'nl': 'of',
     },
     'key.slide_does': {
         'en': 'inside a slideshow: picture back / on (also , and .)',

@@ -478,11 +478,11 @@ def _page_head(doc, title):
 
 LEFT, RIGHT = '<left>', '<right>'  # arrow keys, drawn (Doc.key)
 # the keys of the presentation: the caps (an i18n key for a translated
-# name) and i18n key.<k>_does
+# name, or a word.* i18n key: a word between the caps) and i18n key.<k>_does
 KEYS = [
     ('next', ['Enter', 'key.space', RIGHT]),
     ('back', ['Backspace', LEFT]),
-    ('twice', [RIGHT, RIGHT]),
+    ('twice', [LEFT, LEFT, 'word.or', RIGHT, RIGHT]),
     ('slide', ['<', '>']),
     ('l', ['L']),
     ('p', ['P']),
@@ -557,7 +557,10 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
             continue
         x = M
         for cap in caps:
-            x += doc.key(x, y, tr(cap) if cap.startswith('key.') else cap, 8.5) + 4
+            if cap.startswith('word.'):
+                x += doc.text(x + 1, y, tr(cap), 8.5, color=MUTED) + 6
+            else:
+                x += doc.key(x, y, tr(cap) if cap.startswith('key.') else cap, 8.5) + 4
         below = doc.para(M + 170, y, tr(f'key.{k}_does'), 9, x2 - M - 180)
         y = max(y + 19, below + 6)
     y = doc.section(M, y + 18, tr('run.blocks'))
