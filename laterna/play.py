@@ -259,9 +259,10 @@ def _fingerprint(config, scenes_path, cfg, scenes, supersample):
     h.update(pathlib.Path(scenes_path).read_bytes())
     h.update(str(supersample).encode())
     # the rendering code itself: a code change invalidates old renders, so a
-    # cache written by a buggy intermediate version can never linger
+    # cache written by a buggy intermediate version can never linger. Not
+    # this file: what it draws on top (bars, debug lines) is no render
     here = pathlib.Path(__file__).parent
-    for source in ('render.py', 'video.py', 'play.py', 'frame.py'):
+    for source in ('render.py', 'video.py', 'frame.py'):
         h.update((here / source).read_bytes())
     for scene in scenes:
         for m in scene.get('mappings', []):
