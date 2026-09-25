@@ -105,8 +105,8 @@ TEXTS = {
         'nl': 'wacht op een toets',
     },
     'block.blue_means': {
-        'en': "blackout with the desk's master at 0: the master coming up goes on to the next stage",
-        'nl': 'blackout met de master van de tafel op 0: de master omhoog gaat door naar de volgende stage',
+        'en': 'waiting for DMX (master = 0)',
+        'nl': 'wacht op DMX (master = 0)',
     },
     'block.grey_means': {
         'en': 'top left, one row per timing (shows in step share one): counts down hold + fade to the next picture / the restart',
