@@ -540,6 +540,10 @@ TEXTS = {
         'en': 'video',
         'nl': 'video',
     },
+    'scenes.title': {
+        'en': 'Scenes',
+        'nl': 'Scènes',
+    },
 }
 
 

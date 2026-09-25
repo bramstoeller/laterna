@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Export: three PDFs of the loaded config.yaml and scenes.yaml, written to
+"""Export: four PDFs of the loaded config.yaml and scenes.yaml, written to
 _export/ next to config.yaml (laterna/documents.py lays them out):
 
   config.pdf     calibration, the frame shapes with their inner corners,
@@ -16,7 +16,10 @@ _export/ next to config.yaml (laterna/documents.py lays them out):
                  blackouts as black pages, a slideshow as one page per
                  distinct combination of its pictures, a video as its
                  first frame; with the keystone warp of config.yaml, like
-                 the presentation (the other two show the plane)
+                 the presentation (the others show the plane)
+  scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
+                 blackout, colours and what each object shows (no
+                 descriptions: the values only)
 
 Everything is rendered fresh with the presentation's renderer and shown as
 the lamps show it with the desk at full (laterna/lamps.py), so the export
@@ -301,7 +304,7 @@ def dmx_info(cfg):
 def export_all(
     config='config.yaml', scenes_path='scenes.yaml', out_dir=None, supersample=3, progress=print
 ):
-    """Render and write the three PDFs; returns their paths. progress(text)
+    """Render and write the four PDFs; returns their paths. progress(text)
     is called between the steps (and may raise Cancelled)."""
     config, scenes_path = pathlib.Path(config), pathlib.Path(scenes_path)
     cfg = render.load_config(config)
@@ -326,7 +329,7 @@ def export_all(
     progress('pictures for the config pages...')
     extras = config_renders(cfg, renderer, scenes, views, gain)
 
-    paths = [out / 'backup.pdf', out / 'run-sheet.pdf', out / 'config.pdf']
+    paths = [out / 'backup.pdf', out / 'run-sheet.pdf', out / 'config.pdf', out / 'scenes.pdf']
     progress(f'writing {paths[0].name}...')
     firsts = documents.backup(paths[0], cfg, scenes, views)
     progress(f'writing {paths[1].name}...')
@@ -345,6 +348,8 @@ def export_all(
     documents.config_sheet(
         paths[2], cfg, config.read_text(), object_geometry(cfg), extras, dmx_info(cfg), source
     )
+    progress(f'writing {paths[3].name}...')
+    documents.scenes_sheet(paths[3], cfg, scenes, fades, data, source)
     return paths
 
 
@@ -373,7 +378,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
                 raise Cancelled
         done.append(text)
         draw(
-            ['export: rendering every scene, then three PDFs', '']
+            ['export: rendering every scene, then four PDFs', '']
             + done[-30:]
             + ['', 'Q / Esc cancels']
         )
@@ -395,7 +400,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
 
 def main():
     ap = argparse.ArgumentParser(
-        description='Export config, run sheet and backup as PDF (headless)'
+        description='Export config, run sheet, backup and scenes as PDF (headless)'
     )
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--scenes', default='scenes.yaml')

@@ -1273,3 +1273,120 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
                     M + c * 390, 84 + k * 7.5, doc.fit(line, 6.2, 380, mono=True), 6.2, mono=True
                 )
     doc.save()
+
+
+# ============================================================================
+# the scenes, technically
+
+
+def _mapping_lines(m):
+    """What a mapping sets, as short lines: the medium (file names as in
+    scenes.yaml, without their folder), then its sizing keys."""
+
+    def base(path):
+        return str(path).replace('\\', '/').split('/')[-1]
+
+    if 'slideshow' in m:
+        lines = [
+            f'slideshow (hold {num(m["hold"], 2)}, {m["transition"]} '
+            f'{num(m["transition_time"], 2)})'
+        ]
+        lines += [f'  {base(p)}' for p in m['slideshow']]
+    elif 'video' in m:
+        lines = [f'video {base(m["video"])}']
+    else:
+        lines = [base(m.get('image', '?'))]
+    for key in ('fit', 'width', 'height'):
+        if key in m:
+            lines.append(f'{key} {_value(m[key])}')
+    return lines
+
+
+def scenes_sheet(path, cfg, scenes, fades, data, source):
+    """The scenes as scenes.yaml sets them, in a table: per scene its
+    timing (the effective hold and the fade to the next), blackout, colours
+    and what each object shows; the file's defaults on top. No
+    descriptions: the values only."""
+    i18n.use(cfg.get('language'))
+    show = show_name(cfg)
+    doc = Doc(path, tr('scenes.title'), tr('run.footer', source=source, date=today()), show=show)
+    objects = cfg['objects']
+    split = len(objects) <= 4
+    # columns: # name hold fade blackout molding_color fill_color
+    X = [M, M + 20, M + 150, M + 180, M + 210, M + 252, M + 322]
+    X_OBJ = M + 392
+    obj_w = (doc.w - M - X_OBJ) / (len(objects) if split else 1)
+    size, lead = 7, 8.6
+
+    def head(y):
+        """The column names with their top at y; returns the first row's baseline."""
+        cols = list(
+            zip(X, ['#', 'name', 'hold', 'fade', 'blackout', 'molding_color', 'fill_color'])
+        )
+        if split:
+            cols += [
+                (X_OBJ + k * obj_w, f'object {o["id"]} {o.get("name", "")}')
+                for k, o in enumerate(objects)
+            ]
+        else:
+            cols += [(X_OBJ, 'mappings')]
+        ends = [x for x, _ in cols[1:]] + [doc.w - M]
+        for (x, t), end in zip(cols, ends):
+            doc.text(x, y + 6, doc.fit(t.upper(), 6.5, end - x - 4, True), 6.5, True, MUTED)
+        doc.line(M, y + 10, doc.w - M, y + 10)
+        return y + 20
+
+    # the file's defaults
+    _page_head(doc, tr('scenes.title'))
+    defaults = [
+        (k, _value(data[k])) for k in ('hold', 'transition', 'transition_time', 'fade') if k in data
+    ]
+    y = table(doc, M, 50, defaults, [90, 120], size=7.5, lead=11) if defaults else 50
+    top = y + 10
+
+    def cells(i, s):
+        """[(x, lines, bold)] of scene i."""
+        out = [
+            (X[0], [str(i + 1)], True),
+            (X[1], doc.wrap(str(s.get('name', '')), size, X[2] - X[1] - 6, True), True),
+            (X[2], ['' if s.get('hold') is None else num(s['hold'], 2)], False),
+            (X[3], [num(fades[i], 2)] if i < len(fades) else [''], False),
+            (X[4], ['true'] if s.get('blackout') else [''], False),
+            (X[5], [_value(list(s['molding_color']))] if 'molding_color' in s else [''], False),
+            (X[6], [_value(list(s['fill_color']))] if 'fill_color' in s else [''], False),
+        ]
+        maps = s.get('mappings', [])
+        if split:
+            for k, o in enumerate(objects):
+                lines = []
+                for m in maps:
+                    if o['id'] in m['objects']:
+                        lines = _mapping_lines(m)
+                        if len(m['objects']) > 1:
+                            lines[0] += f'  [{"+".join(str(j) for j in m["objects"])}]'
+                width = obj_w - 6
+                wrapped = [w for line in lines for w in doc.wrap(line, size, width)]
+                out.append((X_OBJ + k * obj_w, wrapped, False))
+        else:
+            lines = []
+            for m in maps:
+                first, *rest = _mapping_lines(m)
+                lines += [f'{"+".join(str(j) for j in m["objects"])}: {first}'] + rest
+            out.append((X_OBJ, lines, False))
+        return out
+
+    y = head(top)
+    for i, s in enumerate(scenes):
+        row = cells(i, s)
+        h = max(len(lines) for _, lines, _ in row) * lead + 4
+        if y + h > doc.h - 34:
+            doc.new_page()
+            _page_head(doc, tr('scenes.title'))
+            y = head(44)
+        if i % 2 == 0:
+            doc.rect(M - 3, y - size - 2, doc.w - 2 * M + 6, h, fill=PANEL)
+        for x, lines, bold in row:
+            for k, line in enumerate(lines):
+                doc.text(x, y + k * lead, line, size, bold)
+        y += h
+    doc.save()
