@@ -7,8 +7,10 @@ Keys:
   (during a fade a step key does nothing; the same key again within half
    a second cuts the fade short and steps on)
   < and >  (also , and .)   a picture back / on inside a slideshow
-  H  stage info on/off (small label, off by default; with a desk also
-     its channels)
+  L  stage label on/off (small, off by default; with a desk also its
+     channels)
+  P  the state bars (see below): half, full, off, half, ...; half at the
+     start
   Tab  the desk's channels as faders across the top (hidden feature):
      they follow the desk, and can be dragged (laterna/faders.py); Tab or
      Esc closes them again
@@ -82,7 +84,7 @@ The light desk can dim it all: `dmx:` in config.yaml (laterna/dmx.py) gives
 the desk a master, the light's colour temperature and per object a lamp
 on its canvas and one on its frame, over sACN, Art-Net or an Enttec
 widget. The levels multiply into everything above, fades
-included; the lamps (laterna/lamps.py) apply them per tick. H also shows
+included; the lamps (laterna/lamps.py) apply them per tick. L also shows
 the desk's channels.
 
 A mapping with `slideshow: [images]` shows those images in turn inside its
@@ -110,13 +112,15 @@ from . import dmx, faders, lamps, render, ui, video
 # blocks 2 px apart, one plus one per whole second left
 STATE_PX = 2  # block size
 STATE_PITCH = 4  # block + gap
-# (the block in the corner, the countdown behind it), dark enough to read
-# from the desk without the audience noticing
-STATE_FADE = ((128, 0, 0), (64, 0, 0))  # a transition runs
-STATE_HOLD = ((128, 64, 0), (64, 32, 0))  # a stage hold runs
-STATE_KEY = ((0, 128, 0), (0, 64, 0))  # waiting for a key
-STATE_DESK = ((0, 0, 128), (0, 0, 128))  # a blackout waits for the master to come up
-STATE_CLIP = ((64, 64, 64), (64, 64, 64))  # the clips' own bars, left, flat grey
+# (the block in the corner, the countdown behind it) at full; they are
+# drawn at STATE_LEVELS of that (P steps on), half at the start: dark
+# enough to read from the desk without the audience noticing
+STATE_FADE = ((255, 0, 0), (128, 0, 0))  # a transition runs
+STATE_HOLD = ((255, 128, 0), (128, 64, 0))  # a stage hold runs
+STATE_KEY = ((0, 255, 0), (0, 128, 0))  # waiting for a key
+STATE_DESK = ((0, 0, 255), (0, 0, 255))  # a blackout waits for the master to come up
+STATE_CLIP = ((128, 128, 128), (128, 128, 128))  # the clips' own bars, left, flat grey
+STATE_LEVELS = (0.5, 1.0, 0.0)  # half, full, off
 BAR_TICK_MS = 250  # redraw interval during a hold (1 px of bar)
 BAR_LADDER = (1, 2, 3, 5, 10, 15, 20, 30)  # seconds per block, then whole minutes
 # the keys that step between stages, and how long a second press of the same
@@ -423,6 +427,11 @@ def run(
         thread.start()
 
     info = False
+    state_level = 0  # index into STATE_LEVELS (P)
+
+    def step_state_level():
+        nonlocal state_level
+        state_level = (state_level + 1) % len(STATE_LEVELS)
 
     def now():
         return pygame.time.get_ticks() / 1000.0
@@ -489,7 +498,7 @@ def run(
         return out
 
     def overlay():
-        """The faders (Tab), the info lines (H, progress) and the state
+        """The faders (Tab), the info lines (L, progress) and the state
         bar (top right) on top of the lit stage."""
         top = panel.draw(screen) if panel.visible else 0
         lines = []
@@ -504,17 +513,22 @@ def run(
 
         max_blocks = right // (4 * STATE_PITCH)  # a bar stays within a quarter
 
+        level = STATE_LEVELS[state_level]
+
         def bar(row, colors, left, span=0.0, on_left=False, unit=None):
             """One bar from a top corner: the corner block in colors[0],
-            then one per step of what is left in colors[1]. The step comes
-            from `span`, the whole stretch, so it stays the same while the
-            bar shrinks."""
+            then one per step of what is left in colors[1], at the state
+            level (P). The step comes from `span`, the whole stretch, so it
+            stays the same while the bar shrinks."""
+            if not level:
+                return
             unit = unit or bar_unit(max(span, left, 0.0), max_blocks)
             for k in range(1 + math.ceil(max(left, 0.0) / unit - 1e-3)):
                 x = STATE_PITCH * k if on_left else right - STATE_PX - STATE_PITCH * k
+                color = colors[0] if k == 0 else colors[1]
                 pygame.draw.rect(
                     screen,
-                    colors[0] if k == 0 else colors[1],
+                    tuple(round(c * level) for c in color),
                     (x, row * STATE_PITCH, STATE_PX, STATE_PX),
                 )
 
@@ -540,6 +554,8 @@ def run(
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
                 panel.toggle()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+                step_state_level()
             elif event.type == pygame.KEYDOWN and event.key in STEP_KEYS:
                 if pressed and pressed[0] == event.key and now() - pressed[1] <= DOUBLE_PRESS:
                     cut, pressed = STEP_KEYS[event.key], None
@@ -759,7 +775,10 @@ def run(
                 go_to(idx - 1)
             elif event.unicode in ('<', '>') or event.key in (pygame.K_COMMA, pygame.K_PERIOD):
                 step_slide(1 if event.unicode == '>' or event.key == pygame.K_PERIOD else -1)
-            elif event.key == pygame.K_h:
+            elif event.key == pygame.K_p:
+                step_state_level()
+                show(idx)
+            elif event.key == pygame.K_l:
                 info = not info
                 show(idx)
         elif event.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED):
