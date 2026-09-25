@@ -69,6 +69,6 @@ def help_font():
     return pygame.font.SysFont('monospace', 22)
 
 
-def draw_help(screen, font, lines, top=20):
+def draw_help(screen, font, lines, top=20, left=20, pitch=26):
     for i, line in enumerate(lines):
-        screen.blit(font.render(line, True, GRAY, BLACK), (20, top + i * 26))
+        screen.blit(font.render(line, True, GRAY, BLACK), (left, top + i * pitch))

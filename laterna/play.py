@@ -13,7 +13,11 @@ Keys:
      start
   Tab  the desk's channels as faders across the top (hidden feature):
      they follow the desk, and can be dragged (laterna/faders.py); Tab or
-     Esc closes them again
+     Esc closes them again. Beside them the debug lines: the scene and its
+     timing, the master triggers (waiting for 0 / above 0, armed or not,
+     the last one that fired, also as an icon: triangle down / up,
+     orange not armed, green armed, grey none, blinking white after it
+     fired), the desk, the clips; the state bars are 10 px high meanwhile
   Q / ESC  quit (back to the menu when started from main.py)
 
 A small bar in the top right corner tells the operator what the show is
@@ -112,6 +116,14 @@ from . import dmx, faders, lamps, render, ui, video
 # blocks 2 px apart, one plus one per whole second left
 STATE_PX = 2  # block size
 STATE_PITCH = 4  # block + gap
+STATE_DEBUG_H = 10  # block height with the faders open (Tab: debug)
+# the master trigger's icon beside the debug lines (Tab)
+TRIGGER_ICON = 16  # px
+TRIGGER_WAIT = (255, 128, 0)  # waiting, not armed yet
+TRIGGER_ARMED = (0, 220, 0)  # waiting and armed: the master moving fires it
+TRIGGER_NONE = (90, 90, 90)  # no master trigger on this scene
+TRIGGER_FIRED = (255, 255, 255)  # blinks after one fired
+TRIGGER_BLINK = 2.0  # seconds
 # (the block in the corner, the countdown behind it) at full; they are
 # drawn at STATE_LEVELS of that (P steps on), half at the start: dark
 # enough to read from the desk without the audience noticing
@@ -507,12 +519,128 @@ def run(
                 out.append(state)
         return out
 
+    def trigger_state():
+        """The master trigger on this scene (see check_master): (what the
+        debug line says, 'down' / 'up' for the one waiting or None, armed)."""
+        here = _is_blackout(scenes[idx])
+        after = idx + 1 < total and _is_blackout(scenes[idx + 1])
+        if transition_until is not None:
+            return '- (fading)', None, False
+        if not desk.receiving:
+            return 'off (no desk signal)', None, False
+        if idx + 1 >= total:
+            return 'none (last scene)', None, False
+        if hold_until is not None:
+            return 'off (the scene has a hold)', None, False
+        if not here and after:
+            armed = 'up' in master_seen
+            text = 'armed' if armed else 'not armed (master > 0 first)'
+            return f'waiting for master = 0 -> scene {idx + 2}, {text}', 'down', armed
+        if here:
+            armed = 'down' in master_seen
+            text = 'armed' if armed else 'not armed (master = 0 first)'
+            return f'waiting for master > 0 -> scene {idx + 2}, {text}', 'up', armed
+        return 'none (next scene is no blackout)', None, False
+
+    def trigger_lines():
+        """The master trigger, the master and the last trigger that fired."""
+        master = desk.master() * 255.0
+        lines = [
+            f'master trigger: {trigger_state()[0]}',
+            f'master {master:.1f} ({"= 0" if master_dark else "> 0"})',
+        ]
+        if last_trigger is not None:
+            kind, old, new, when = last_trigger
+            lines.append(
+                f'last trigger: master {kind}, scene {old + 1} -> {new + 1}, '
+                f'{now() - when:.1f} s ago'
+            )
+        return lines
+
+    def draw_trigger(x, y):
+        """The master trigger as an icon: a triangle down (waiting for 0) or
+        up (waiting for > 0), orange while not armed, green when armed, a
+        grey square when there is none; white blinking for a while after
+        one fired."""
+        _, direction, armed = trigger_state()
+        s = TRIGGER_ICON
+        if last_trigger is not None and now() - last_trigger[3] < TRIGGER_BLINK:
+            if int((now() - last_trigger[3]) * 8) % 2 == 0:  # 4 Hz
+                pygame.draw.rect(screen, TRIGGER_FIRED, (x, y, s, s))
+            return
+        if direction is None:
+            pygame.draw.rect(screen, TRIGGER_NONE, (x + 3, y + 3, s - 6, s - 6))
+            return
+        color = TRIGGER_ARMED if armed else TRIGGER_WAIT
+        if direction == 'down':
+            points = [(x, y), (x + s, y), (x + s / 2, y + s)]
+        else:
+            points = [(x, y + s), (x + s, y + s), (x + s / 2, y)]
+        pygame.draw.polygon(screen, color, points)
+
+    def debug_lines():
+        """Everything useful while the faders are open (Tab)."""
+        scene = scenes[idx]
+        kind = 'blackout' if _is_blackout(scene) else 'scene'
+        hold = scene.get('hold')
+        fade_in = fades[idx - 1] if idx > 0 else 0.0
+        fade_out = fades[idx] if idx + 1 < total else None
+        lines = [
+            f'{kind} {idx + 1}/{total}: {scene.get("name", "?")}',
+            f'  hold {"-" if hold is None else f"{hold:.1f} s"}, fade in {fade_in:.1f} s, '
+            f'fade out {"-" if fade_out is None else f"{fade_out:.1f} s"}',
+        ]
+        if transition_until is not None:
+            lines.append(
+                f'  fading to scene {transition_to + 1}: '
+                f'{max(transition_until - now(), 0.0):.1f} / {transition_span:.1f} s left'
+            )
+        elif hold_until is not None:
+            lines.append(f'  hold: {max(hold_until - now(), 0.0):.1f} / {hold:.1f} s left')
+        else:
+            lines.append('  waiting for a key')
+        lines += trigger_lines()
+        lines += desk.status_lines()
+        player = players.get(idx)
+        seen = set()
+        for spec in player.specs if player else ():
+            if spec['path'] in seen:  # mapped twice: one clip, one line
+                continue
+            seen.add(spec['path'])
+            clip = player.clips[spec['path']]
+            if isinstance(clip, video.SlideshowClip):
+                pos = clip.pos[0] + 1 if isinstance(clip.pos, tuple) else '?'
+                what = (
+                    f'slideshow {clip.count} x {clip.hold:.1f} + {clip.transition_time:.1f} s, '
+                    f'picture {pos}'
+                )
+            else:
+                what = (
+                    f'{pathlib.Path(clip.path).name}: {clip.count} frames @ {clip.fps:.2f} fps, '
+                    f'frame {clip.pos + 1}'
+                )
+            if clip.t0 is None:
+                lines.append(f'  {what}, not started')
+                continue
+            t = now() - clip.t0
+            state = clip.next_change(t)
+            if state is not None:
+                fading, left, span = state
+                what += f', {"fading" if fading else "next"} in {left:.1f} / {span:.1f} s'
+            lines.append(f'  {what} (t {t:.1f} s)')
+        return lines
+
     def overlay():
-        """The faders (Tab), the info lines (L, progress) and the state
-        bar (top right) on top of the lit scene."""
-        top = panel.draw(screen) if panel.visible else 0
+        """The faders and the debug lines (Tab), the info lines (L,
+        progress) and the state bar (top right) on top of the lit scene."""
+        top = 0
         lines = []
-        if info:
+        if panel.visible:  # the debug lines beside the faders, in their font
+            top = panel.draw(screen)
+            lines_x = panel.width + TRIGGER_ICON + 12
+            ui.draw_help(screen, panel.font, debug_lines(), left=lines_x, pitch=20)
+            draw_trigger(panel.width, 20 + 3 * 20 + 2)  # beside 'master trigger:'
+        elif info:
             lines.append(f'scene {idx + 1}/{total}: {scenes[idx].get("name", "?")}')
             lines += desk.status_lines()
         if len(images) < total:
@@ -524,6 +652,8 @@ def run(
         max_blocks = right // (4 * STATE_PITCH)  # a bar stays within a quarter
 
         level = STATE_LEVELS[state_level]
+        height = STATE_DEBUG_H if panel.visible else STATE_PX
+        row_pitch = height + STATE_PITCH - STATE_PX
 
         def bar(row, colors, left, span=0.0, on_left=False, unit=None):
             """One bar from a top corner: the corner block in colors[0],
@@ -539,7 +669,7 @@ def run(
                 pygame.draw.rect(
                     screen,
                     tuple(round(c * level) for c in color),
-                    (x, row * STATE_PITCH, STATE_PX, STATE_PX),
+                    (x, row * row_pitch, STATE_PX, height),
                 )
 
         if transition_until is not None:  # the scene, top right
@@ -602,18 +732,20 @@ def run(
     last_shown = 0.0  # when show() last drew (the bar's redraw during a hold)
     transition_until = None  # ... at which the running fade ends (the state bar)
     transition_span = 0.0  # how long that fade is, for the bar's step
+    transition_to = None  # the scene that fade goes to (the debug lines)
     pressed = None  # (key, when) of a step key pressed during a fade
     cut = None  # +1/-1 when a second press asked to step on at once
 
     master_seen = set()  # 'up' / 'down': how the master has stood on this scene
     master_dark = False  # the master is at 0 (the desk's blue state block)
+    last_trigger = None  # ('= 0' / '> 0', from, to, when) of the last master trigger
 
     def check_master():
         """The master steps in and out of blackout scenes (see the module
         doc): into the blackout that follows a scene waiting for a key when
         the master goes to 0 there, out of a blackout waiting for a key when
         it comes up after having been 0 there."""
-        nonlocal master_dark
+        nonlocal master_dark, last_trigger
         if not desk.receiving:
             return
         was, master_dark = master_dark, desk.master() < DARK
@@ -624,8 +756,10 @@ def run(
             return
         here, after = _is_blackout(scenes[idx]), _is_blackout(scenes[idx + 1])
         if not here and after and master_dark and 'up' in master_seen:
+            last_trigger = ('= 0', idx, idx + 1, now())
             go_to(idx + 1, instant=True)
         elif here and not master_dark and 'down' in master_seen:
+            last_trigger = ('> 0', idx, idx + 1, now())
             go_to(idx + 1, instant=True)
 
     def arm_hold():
@@ -663,9 +797,9 @@ def run(
             new, cut = idx + cut, None
 
     def go_once(new, instant=False):
-        nonlocal idx, transition_until, transition_span
+        nonlocal idx, transition_until, transition_span, transition_to
         fade = 0.0 if instant else fades[min(idx, new)]
-        transition_until, transition_span = now() + fade, fade
+        transition_until, transition_span, transition_to = now() + fade, fade, new
         if _is_blackout(scenes[new]) and not _is_blackout(scenes[idx]):
             dim(
                 screen,
