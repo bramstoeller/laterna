@@ -514,8 +514,8 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     _page_head(doc, tr('run.title'))
     y = _strip(doc, 40, scenes, facts, desk)  # at the top, as on the other pages
     kinds = _media_kinds(scenes)
-    _strip_legend(doc, M, y + 13, any(desk), kinds)
-    y += 30
+    _strip_legend(doc, M, y + 22, any(desk), kinds)
+    y += 40
     doc.line(M, y, doc.w - M, y)
     if description:
         y = doc.para(M, y + 20, description, 10, doc.w - 2 * M) + 4
@@ -576,7 +576,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     def head(first, last):
         _page_head(doc, tr('run.title'))
         _strip(doc, 40, scenes, facts, desk, on_page=(first, last))
-        y = 72
+        y = 84
         cols = [
             (X_NUM, '#'),
             (X_PIC, tr('col.picture')),
@@ -613,12 +613,12 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
         return h
 
     bottom = doc.h - 34
-    pages, current, y = [], [], 78
+    pages, current, y = [], [], 90
     for i in range(n):
         h = row_height(i)
         if current and y + h > bottom:
             pages.append(current)
-            current, y = [], 78
+            current, y = [], 90
         current.append(i)
         y += h
     pages.append(current)
