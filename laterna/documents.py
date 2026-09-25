@@ -47,6 +47,9 @@ GREEN = (0.24, 0.48, 0.24)
 ORANGE = (0.75, 0.48, 0.10)
 RED = (0.75, 0.22, 0.17)
 BLUE = (0.18, 0.40, 0.56)
+DESK = (0.15, 0.28, 0.75)  # a step the desk can take too (the blue state block)
+STRIP_OFF = (0.92, 0.91, 0.88)  # a stage cell in the strip
+STRIP_ON = (0.40, 0.38, 0.35)  # ... one of this page's
 NIGHT = (0.04, 0.04, 0.04)
 WOOD = (0.16, 0.12, 0.08)
 GILT = (0.82, 0.67, 0.33)
@@ -324,17 +327,26 @@ ENTRY = {'start': ('START', MUTED), 'key': ('KEY', GREEN), 'auto': ('AUTO', ORAN
 
 
 def _strip(doc, y, stages, facts, highlight=()):
-    """All stages as numbered cells across the page: green = reached by a
-    key, orange = by itself, black bar = blackout; highlighted = drawn
-    solid (the ones on this page)."""
+    """All stages as numbered cells across the page (highlighted = the
+    ones on this page, drawn dark), with the step into each in the gap
+    before it: a green line = on a key, blue = on a key or by the desk (a
+    blackout on either side, see play.py), an orange wedge = by itself;
+    a black bar under a cell = blackout."""
     n = len(stages)
-    gap = 2 if n <= 60 else 1
+    gap = 5 if n <= 40 else (3 if n <= 80 else 2)
     cell = (doc.w - 2 * M - gap * (n - 1)) / n
     for j in range(n):
         x = M + j * (cell + gap)
-        _, col = ENTRY[facts[j]['entry']]
         solid = j in highlight
-        doc.rect(x, y, cell, 14, fill=col if solid else tuple(c * 0.25 + 0.75 for c in col))
+        doc.rect(x, y, cell, 14, fill=STRIP_ON if solid else STRIP_OFF)
+        if j:  # the step into stage j
+            mid = x - gap / 2
+            if facts[j]['entry'] == 'auto':
+                w = gap / 2 + 1.5
+                doc.poly([(mid - w, y + 2), (mid + w, y + 7), (mid - w, y + 12)], fill=ORANGE)
+            else:
+                desk = stages[j].get('blackout') or stages[j - 1].get('blackout')
+                doc.rect(mid - 0.9, y - 1.5, 1.8, 17, fill=DESK if desk else GREEN)
         if cell >= 11:
             doc.text(
                 x + cell / 2,
@@ -362,7 +374,7 @@ BLOCKS = [  # colour, i18n block.<name> and block.<name>_means, blocks drawn
     (RED, 'red', 4),
     (ORANGE, 'orange', 4),
     (GREEN, 'green', 1),
-    (BLUE, 'blue', 1),
+    (DESK, 'blue', 1),
     ((0.35, 0.35, 0.35), 'grey', 4),
 ]
 

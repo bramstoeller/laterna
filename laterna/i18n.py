@@ -45,8 +45,10 @@ TEXTS = {
         'nl': '{n} stages · {keys} op een toets, {auto} vanzelf · genummerd zoals het H-label van de voorstelling (stage k/{n})',
     },
     'run.strip_legend': {
-        'en': 'green = on a key, orange = comes by itself, black bar = blackout',
-        'nl': 'groen = op een toets, oranje = komt vanzelf, zwarte balk = blackout',
+        'en': 'green line = on a key, blue line = on a key or by the desk (a blackout), '
+        'orange wedge = by itself, black bar = blackout',
+        'nl': 'groene streep = op een toets, blauwe streep = op een toets of door de tafel '
+        '(een blackout), oranje wig = vanzelf, zwarte balk = blackout',
     },
     'run.keys': {
         'en': 'Keys',
