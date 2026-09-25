@@ -97,8 +97,8 @@ TEXTS = {
         'nl': 'een overgang loopt: één toets doet niets, twee breken hem af',
     },
     'block.orange_means': {
-        'en': 'the stage holds: it moves on by itself, the blocks count down',
-        'nl': 'de stage heeft een hold: hij gaat vanzelf door, de blokjes tellen af',
+        'en': 'moves on by itself, the blocks count down',
+        'nl': 'gaat vanzelf door, de blokjes tellen af',
     },
     'block.green_means': {
         'en': 'waiting for a key',
