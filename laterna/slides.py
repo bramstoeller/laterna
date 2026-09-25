@@ -2,7 +2,7 @@
 python-pptx (lxml is a native dependency), just the few parts PowerPoint
 and Impress need for picture slides.
 
-The same pictures as backup.pdf, one slide each, full screen on black,
+The same pictures as the backup PDF, one slide each, full screen on black,
 but played like play.py plays them: each scene fades in over its fade,
 slideshow pictures fade over their transition_time at their time, and a
 scene with a hold moves on by itself when the hold has run out; the other
@@ -139,7 +139,7 @@ def timings(scenes, fades, views):
 
 
 def write(path, cfg, scenes, fades, views, title):
-    """Write backup.pptx: every view (export.scene_views) a slide."""
+    """Write the backup pptx: every view (export.scene_views) a slide."""
     w, h = cfg['canvas']
     cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
     n = len(scenes)

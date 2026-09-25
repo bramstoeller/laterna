@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Export: four PDFs and a pptx of the loaded config.yaml and scenes.yaml,
 written to _export/ next to config.yaml (laterna/documents.py lays the PDFs
-out), named in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf):
+out), named in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf),
+the backup after the show's folder (shows/my-show: my-show.pdf, my-show.pptx):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
@@ -12,13 +13,13 @@ out), named in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf
                  picture, how it is reached (key or by itself, fade, time
                  since the last key), what it does while it stands, what is
                  on each object and its page in the backup
-  backup.pdf     every scene full screen at the canvas's aspect ratio, in
+  <show>.pdf     the backup: every scene full screen at the canvas's aspect ratio, in
                  show order, to show from a PDF viewer when all else fails:
                  blackouts as black pages, a slideshow as one page per
                  distinct combination of its pictures, a video as its
                  first frame; with the keystone warp of config.yaml, like
                  the presentation (the others show the plane)
-  backup.pptx    the same pictures as slides, played like the show: fades,
+  <show>.pptx    the same pictures as slides, played like the show: fades,
                  slideshow changes at their time, holds moving on by
                  themselves, the rest on a click or key (laterna/slides.py)
   scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
@@ -49,13 +50,13 @@ from . import dmx, documents, frame, render, slides, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_export'
-# the PDFs by the export's language (config.yaml language): backup, cue
-# sheet, config, scenes
+# the PDFs by the export's language (config.yaml language): cue sheet,
+# config, scenes; the backup is named after the show (documents.backup_name)
 FILES = {
-    'en': ('backup.pdf', 'cue-sheet.pdf', 'config.pdf', 'scenes.pdf'),
-    'nl': ('backup.pdf', 'draaiboek.pdf', 'configuratie.pdf', 'scenes.pdf'),
+    'en': ('cue-sheet.pdf', 'config.pdf', 'scenes.pdf'),
+    'nl': ('draaiboek.pdf', 'configuratie.pdf', 'scenes.pdf'),
 }
-SLIDES = 'backup.pptx'  # the backup as slides, with fades and holds (laterna/slides.py)
+OLD_FILES = {'run-sheet.pdf', 'backup.pdf', 'backup.pptx'}  # earlier names, removed
 MAX_COMBINATIONS = 64  # slideshow pictures per scene in the export
 THUMB_WIDTH = 480  # px of the cue list pictures
 
@@ -377,7 +378,7 @@ def dmx_info(cfg):
 def export_all(
     config='config.yaml', scenes_path='scenes.yaml', out_dir=None, supersample=3, progress=print
 ):
-    """Render and write the four PDFs and backup.pptx; returns their paths. progress(text)
+    """Render and write the four PDFs and the pptx; returns their paths. progress(text)
     is called between the steps (and may raise Cancelled)."""
     config, scenes_path = pathlib.Path(config), pathlib.Path(scenes_path)
     cfg = render.load_config(config)
@@ -403,17 +404,19 @@ def export_all(
     extras = config_renders(cfg, renderer, scenes, views, gain)
 
     names = FILES[cfg.get('language') or 'en']
-    for old in {n for files in FILES.values() for n in files} | {'run-sheet.pdf'}:
+    backup = documents.backup_name(cfg)
+    for old in {n for files in FILES.values() for n in files} | OLD_FILES:
         if old not in names and (out / old).exists():
-            (out / old).unlink()  # the same document under another language's name
+            (out / old).unlink()  # the same document under another name
+    pdf, pptx = out / f'{backup}.pdf', out / f'{backup}.pptx'
     paths = [out / name for name in names]
+    progress(f'writing {pdf.name}...')
+    documents.backup(pdf, cfg, scenes, views)
+    progress(f'writing {pptx.name}...')
+    slides.write(pptx, cfg, scenes, fades, views, f'{documents.show_name(cfg)} · backup')
     progress(f'writing {paths[0].name}...')
-    documents.backup(paths[0], cfg, scenes, views)
-    progress(f'writing {SLIDES}...')
-    slides.write(out / SLIDES, cfg, scenes, fades, views, f'{documents.show_name(cfg)} · {SLIDES}')
-    progress(f'writing {paths[1].name}...')
     documents.run_sheet(
-        paths[1],
+        paths[0],
         cfg,
         scenes,
         fades,
@@ -422,13 +425,13 @@ def export_all(
         source,
         data.get('description'),
     )
-    progress(f'writing {paths[2].name}...')
+    progress(f'writing {paths[1].name}...')
     documents.config_sheet(
-        paths[2], cfg, config.read_text(), object_geometry(cfg), extras, dmx_info(cfg), source
+        paths[1], cfg, config.read_text(), object_geometry(cfg), extras, dmx_info(cfg), source
     )
-    progress(f'writing {paths[3].name}...')
-    documents.scenes_sheet(paths[3], cfg, scenes, fades, data, source)
-    return paths[:1] + [out / SLIDES] + paths[1:]
+    progress(f'writing {paths[2].name}...')
+    documents.scenes_sheet(paths[2], cfg, scenes, fades, data, source)
+    return [pdf, pptx] + paths
 
 
 def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):

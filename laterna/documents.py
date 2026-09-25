@@ -104,6 +104,12 @@ def crop(image, box):
     return image[y0:y1, x0:x1]
 
 
+def backup_name(cfg):
+    """The backup's file name without extension: the show's folder
+    (shows/my-show: my-show.pdf, my-show.pptx)."""
+    return cfg['_dir'].name
+
+
 def show_name(cfg):
     """The show's name: its folder's, dashes as spaces (shows/my-show: my show)."""
     return cfg['_dir'].name.replace('-', ' ').replace('_', ' ')
@@ -573,7 +579,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
 
     y = doc.section(x2, top, tr('run.trouble'))
     y = doc.para(x2, y, tr('run.trouble_restart'), 9.5, doc.w - M - x2)
-    y = doc.para(x2, y + 6, tr('run.trouble_backup'), 9.5, doc.w - M - x2)
+    y = doc.para(x2, y + 6, tr('run.trouble_backup', name=backup_name(cfg)), 9.5, doc.w - M - x2)
     y = doc.section(x2, y + 18, tr('run.columns'))
     doc.para(
         x2,

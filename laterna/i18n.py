@@ -117,8 +117,8 @@ TEXTS = {
         'nl': 'Na Q of een herstart begint de show bij scène 1. Terug naar waar je was: druk een paar keer snel op het pijltje naar rechts; een tweede druk tijdens een fade slaat hem over. Het scènenummer staat in de eerste kolom van de cuelijst en in het L-label.',
     },
     'run.trouble_backup': {
-        'en': 'Last resort: backup.pptx holds every scene full screen in show order, with its fades and holds; start it as a slide show on the projector, a click or key goes on where the show waits for a key. Without PowerPoint or Impress: backup.pdf, full screen, without fades. Neither has spots dimming with the desk.',
-        'nl': 'Laatste redmiddel: backup.pptx bevat elke scène schermvullend in showvolgorde, met de fades en holds; start hem als diavoorstelling op de beamer, een klik of toets gaat verder waar de show op een toets wacht. Zonder PowerPoint of Impress: backup.pdf, schermvullend, zonder fades. In geen van beide dimmen de spots met de tafel.',
+        'en': 'Last resort: {name}.pptx holds every scene full screen in show order, with its fades and holds; start it as a slide show on the projector, a click or key goes on where the show waits for a key. Without PowerPoint or Impress: {name}.pdf, full screen, without fades. Neither has spots dimming with the desk.',
+        'nl': 'Laatste redmiddel: {name}.pptx bevat elke scène schermvullend in showvolgorde, met de fades en holds; start hem als diavoorstelling op de beamer, een klik of toets gaat verder waar de show op een toets wacht. Zonder PowerPoint of Impress: {name}.pdf, schermvullend, zonder fades. In geen van beide dimmen de spots met de tafel.',
     },
     'run.columns': {
         'en': 'Columns',
