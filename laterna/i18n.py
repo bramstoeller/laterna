@@ -57,8 +57,8 @@ TEXTS = {
         'nl': 'vorige stage',
     },
     'key.twice_does': {
-        'en': 'again during a fade: skips it, so quick presses step straight through',
-        'nl': 'nog eens tijdens een fade: slaat hem over, dus snel drukken stapt er direct doorheen',
+        'en': 'twice quickly during a fade: skips it, so quick presses step straight through',
+        'nl': '2x snel tijdens een fade: slaat hem over, dus snel drukken stapt er direct doorheen',
     },
     'key.slide_does': {
         'en': 'inside a slideshow: picture back / on (also , and .)',
