@@ -120,10 +120,6 @@ TEXTS = {
         'en': 'After Q or a restart the show begins at stage 1. To get back to where you were, press the right arrow quickly a few times: a second press during a fade skips it. The stage number is in the first column of the cue list and in the L label.',
         'nl': 'Na Q of een herstart begint de show bij stage 1. Terug naar waar je was: druk een paar keer snel op het pijltje naar rechts; een tweede druk tijdens een fade slaat hem over. Het stagenummer staat in de eerste kolom van de cuelijst en in het L-label.',
     },
-    'run.trouble_render': {
-        'en': 'The first start after a change of config or scenes renders the stages first (a progress line in the picture); after that they come from the cache.',
-        'nl': 'De eerste start na een wijziging van config of scenes rendert eerst de stages (een voortgangsregel in beeld); daarna komen ze uit de cache.',
-    },
     'run.trouble_backup': {
         'en': 'Last resort: backup.pdf holds every stage full screen in show order (column "backup" below gives the page). Open it full screen on the projector; no fades, no spots dimming with the desk.',
         'nl': 'Laatste redmiddel: backup.pdf bevat elke stage schermvullend in showvolgorde (kolom "backup" hieronder geeft de pagina). Open hem schermvullend op de beamer; geen fades, geen spots die met de tafel dimmen.',

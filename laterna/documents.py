@@ -537,7 +537,6 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
 
     y = doc.section(x2, top, tr('run.trouble'))
     y = doc.para(x2, y, tr('run.trouble_restart'), 8.5, doc.w - M - x2)
-    y = doc.para(x2, y + 4, tr('run.trouble_render'), 8.5, doc.w - M - x2)
     y = doc.para(x2, y + 4, tr('run.trouble_backup'), 8.5, doc.w - M - x2)
     y = doc.section(x2, y + 12, tr('run.columns'))
     doc.para(
