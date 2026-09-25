@@ -15,9 +15,10 @@ Keys:
      they follow the desk, and can be dragged (laterna/faders.py); Tab or
      Esc closes them again. Beside them the debug lines: the scene and its
      timing, the master triggers (waiting for 0 / above 0, armed or not,
-     the last one that fired, also as an icon: a ring (= 0) or a
-     triangle up (> 0), orange not armed, green armed, grey none, and a
-     white arrow down / up for 2 s after it fired), the desk, the clips; the state bars are 10 px high meanwhile
+     the last one that fired, also as an icon: a blue arrow down (= 0)
+     or up (> 0), dark not armed, bright armed, grey none, white for 2 s
+     after it fired), the desk, the clips; the state bars are 10 px high and
+     full meanwhile, whatever P says
   Q / ESC  quit (back to the menu when started from main.py)
 
 A small bar in the top right corner tells the operator what the show is
@@ -121,8 +122,8 @@ STATE_DEBUG_H = 10  # block height with the faders open (Tab: debug)
 TRIGGER_ICON = 18  # px
 DEBUG_FONT = 20  # the debug lines' font size and line pitch, px
 DEBUG_PITCH = 24
-TRIGGER_WAIT = (255, 128, 0)  # waiting, not armed yet
-TRIGGER_ARMED = (0, 220, 0)  # waiting and armed: the master moving fires it
+TRIGGER_ARMED = (0, 64, 255)  # waiting and armed: the master moving fires it
+TRIGGER_WAIT = (0, 32, 128)  # waiting, not armed yet: half that
 TRIGGER_NONE = (90, 90, 90)  # no master trigger on this scene
 TRIGGER_FIRED = (255, 255, 255)  # the arrow after one fired
 TRIGGER_FIRED_S = 2.0  # how long that arrow shows, seconds
@@ -545,27 +546,25 @@ def run(
         return 'no trigger (next no blackout)', None, False
 
     def draw_trigger(x, y):
-        """The master trigger as an icon: a ring, a zero (waiting for 0), or
-        a triangle up (waiting for > 0), orange while not armed, green when
-        armed, a grey square when there is none; for a while after one
-        fired a white arrow its way (down: to 0, up: above 0)."""
+        """The master trigger as an icon: a blue arrow down (waiting for 0)
+        or up (waiting for > 0), dark while not armed, bright when armed, a
+        grey square when there is none; for a while after one fired the
+        arrow its way in white."""
         s = TRIGGER_ICON
-        mid = x + s // 2
-        if last_trigger is not None and now() - last_trigger[3] < TRIGGER_FIRED_S:
-            down = last_trigger[0] == '= 0'
-            tip, base = (y + s, y + s // 2) if down else (y, y + s // 2)
-            tail = y if down else y + s
-            pygame.draw.line(screen, TRIGGER_FIRED, (mid, tail), (mid, base), 4)
-            pygame.draw.polygon(screen, TRIGGER_FIRED, [(x, base), (x + s, base), (mid, tip)])
-            return
-        _, direction, armed = trigger_state()
-        color = TRIGGER_ARMED if armed else TRIGGER_WAIT
-        if direction is None:
-            pygame.draw.rect(screen, TRIGGER_NONE, (x + 3, y + 3, s - 6, s - 6))
-        elif direction == 'down':
-            pygame.draw.circle(screen, color, (mid, y + s // 2), s // 2, 3)
+        fired = last_trigger is not None and now() - last_trigger[3] < TRIGGER_FIRED_S
+        if fired:
+            down, color = last_trigger[0] == '= 0', TRIGGER_FIRED
         else:
-            pygame.draw.polygon(screen, color, [(x, y + s), (x + s, y + s), (mid, y)])
+            _, direction, armed = trigger_state()
+            if direction is None:
+                pygame.draw.rect(screen, TRIGGER_NONE, (x + 3, y + 3, s - 6, s - 6))
+                return
+            down, color = direction == 'down', TRIGGER_ARMED if armed else TRIGGER_WAIT
+        mid = x + s // 2
+        tip, base = (y + s, y + s // 2) if down else (y, y + s // 2)
+        tail = y if down else y + s
+        pygame.draw.line(screen, color, (mid, tail), (mid, base), 4)
+        pygame.draw.polygon(screen, color, [(x, base), (x + s, base), (mid, tip)])
 
     def debug_lines():
         """Everything useful while the faders are open (Tab), tersely."""
@@ -632,7 +631,7 @@ def run(
 
         max_blocks = right // (4 * STATE_PITCH)  # a bar stays within a quarter
 
-        level = STATE_LEVELS[state_level]
+        level = 1.0 if panel.visible else STATE_LEVELS[state_level]  # debug: full
         height = STATE_DEBUG_H if panel.visible else STATE_PX
         row_pitch = height + STATE_PITCH - STATE_PX
 
