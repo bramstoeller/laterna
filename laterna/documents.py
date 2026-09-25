@@ -504,17 +504,16 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
 
     # --- cover ------------------------------------------------------------
     _page_head(doc, tr('run.title'))
-    y = 44
-    if description:
-        y = doc.para(M, y + 4, description, 10, doc.w - 2 * M) + 8
-        doc.line(M, y - 4, doc.w - M, y - 4)
-        y += 8
-    y = _strip(doc, y, scenes, facts, desk)
+    y = _strip(doc, 40, scenes, facts, desk)  # at the top, as on the other pages
     _strip_legend(doc, M, y + 13, any(desk))
+    y += 30
+    doc.line(M, y, doc.w - M, y)
+    if description:
+        y = doc.para(M, y + 20, description, 10, doc.w - 2 * M) + 4
+        doc.line(M, y, doc.w - M, y)
 
     x2 = M + 380
-    doc.line(M, y + 30, doc.w - M, y + 30)
-    top = y + 50
+    top = y + 20
     y = doc.section(M, top, tr('run.keys'))
     for k, caps in KEYS:
         x = M
