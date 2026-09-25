@@ -41,62 +41,36 @@ TEXTS = {
         'nl': '{show} · draaiboek · {source} · gemaakt {date}',
     },
     'run.summary': {
-        'en': '{n} stages · {keys} on a key, {auto} by themselves · numbered like the H label of the presentation (stage k/{n})',
-        'nl': '{n} stages · {keys} op een toets, {auto} vanzelf · genummerd zoals het H-label van de voorstelling (stage k/{n})',
-    },
-    'run.strip_legend': {
-        'en': 'green line = on a key, blue line = on a key or by the desk (a blackout), '
-        'orange wedge = by itself, black bar = blackout',
-        'nl': 'groene streep = op een toets, blauwe streep = op een toets of door de tafel '
-        '(een blackout), oranje wig = vanzelf, zwarte balk = blackout',
+        'en': '{n} stages · {keys} on a key, {auto} by themselves · numbered like the L label of the presentation (stage k/{n})',
+        'nl': '{n} stages · {keys} op een toets, {auto} vanzelf · genummerd zoals het L-label van de voorstelling (stage k/{n})',
     },
     'run.keys': {
         'en': 'Keys',
         'nl': 'Toetsen',
     },
-    'key.next': {
-        'en': 'Enter / space / right arrow',
-        'nl': 'Enter / spatie / pijl rechts',
-    },
     'key.next_does': {
         'en': 'next stage (fades)',
         'nl': 'volgende stage (met fade)',
-    },
-    'key.back': {
-        'en': 'Backspace / left arrow',
-        'nl': 'Backspace / pijl links',
     },
     'key.back_does': {
         'en': 'previous stage',
         'nl': 'vorige stage',
     },
-    'key.twice': {
-        'en': 'same key twice within 0.5 s',
-        'nl': 'dezelfde toets twee keer binnen 0,5 s',
-    },
     'key.twice_does': {
-        'en': 'during a fade: cut it short and step on',
-        'nl': 'tijdens een fade: afbreken en doorgaan',
-    },
-    'key.slide': {
-        'en': '>  <   (also  .  ,)',
-        'nl': '>  <   (ook  .  ,)',
+        'en': 'again during a fade: skips it, so quick presses step straight through',
+        'nl': 'nog eens tijdens een fade: slaat hem over, dus snel drukken stapt er direct doorheen',
     },
     'key.slide_does': {
-        'en': 'inside a slideshow: picture on / back',
-        'nl': 'in een slideshow: beeld verder / terug',
-    },
-    'key.h_does': {
-        'en': 'stage label on/off (drawn in the projection itself)',
-        'nl': 'stagelabel aan/uit (in de projectie zelf getekend)',
+        'en': 'inside a slideshow: picture back / on (also , and .)',
+        'nl': 'in een slideshow: beeld terug / verder (ook , en .)',
     },
     'key.q_does': {
         'en': 'stop, back to the menu',
         'nl': 'stoppen, terug naar het menu',
     },
     'run.blocks': {
-        'en': 'State blocks, top right of the projection',
-        'nl': 'Statusblokjes, rechtsboven in de projectie',
+        'en': 'State blocks, top right of the projection (P: half, full, off)',
+        'nl': 'Statusblokjes, rechtsboven in de projectie (P: half, vol, uit)',
     },
     'block.red': {
         'en': 'red',
@@ -143,8 +117,8 @@ TEXTS = {
         'nl': 'Als er iets misgaat',
     },
     'run.trouble_restart': {
-        'en': 'After Q or a restart the show always begins at stage 1. To get back to where you were: press Enter, and during every fade press Enter again within half a second - the fade is skipped and the show steps straight on. The stage number is in the first column of the cue list and in the H label.',
-        'nl': 'Na Q of een herstart begint de show altijd bij stage 1. Terug naar waar je was: druk Enter, en druk tijdens elke fade binnen een halve seconde nog eens Enter - de fade wordt overgeslagen en de show gaat direct door. Het stagenummer staat in de eerste kolom van de cuelijst en in het H-label.',
+        'en': 'After Q or a restart the show begins at stage 1. To get back to where you were, press the right arrow quickly a few times: a second press during a fade skips it. The stage number is in the first column of the cue list and in the L label.',
+        'nl': 'Na Q of een herstart begint de show bij stage 1. Terug naar waar je was: druk een paar keer snel op het pijltje naar rechts; een tweede druk tijdens een fade slaat hem over. Het stagenummer staat in de eerste kolom van de cuelijst en in het L-label.',
     },
     'run.trouble_render': {
         'en': 'The first start after a change of config or scenes renders the stages first (a progress line in the picture); after that they come from the cache.',
@@ -526,14 +500,6 @@ TEXTS = {
         'en': 'AUTO',
         'nl': 'AUTO',
     },
-    'key.h': {
-        'en': 'H',
-        'nl': 'H',
-    },
-    'key.q': {
-        'en': 'Q / Esc',
-        'nl': 'Q / Esc',
-    },
     'col.in': {
         'en': 'in',
         'nl': 'in',
@@ -557,6 +523,42 @@ TEXTS = {
     'config.object': {
         'en': 'Object {id} · {name}',
         'nl': 'Object {id} · {name}',
+    },
+    'key.space': {
+        'en': 'Space',
+        'nl': 'Spatie',
+    },
+    'key.l_does': {
+        'en': 'stage label on/off (drawn in the projection itself)',
+        'nl': 'stagelabel aan/uit (in de projectie zelf getekend)',
+    },
+    'key.p_does': {
+        'en': 'state blocks top right: half, full, off',
+        'nl': 'statusblokjes rechtsboven: half, vol, uit',
+    },
+    'legend.step_key': {
+        'en': 'on a key',
+        'nl': 'op een toets',
+    },
+    'legend.step_desk': {
+        'en': 'on a key or by the desk',
+        'nl': 'op een toets of door de tafel',
+    },
+    'legend.step_auto': {
+        'en': 'by itself',
+        'nl': 'vanzelf',
+    },
+    'legend.blackout': {
+        'en': 'blackout',
+        'nl': 'blackout',
+    },
+    'legend.slideshow': {
+        'en': 'slideshow',
+        'nl': 'slideshow',
+    },
+    'legend.video': {
+        'en': 'video',
+        'nl': 'video',
     },
 }
 

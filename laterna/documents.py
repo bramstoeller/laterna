@@ -6,7 +6,7 @@ parsed config and stages. Three documents:
   config_sheet  calibration, frame shapes, look, the pretend spot, DMX
                 and config.yaml itself (A4 landscape)
   run_sheet     the operator's cue list: every stage numbered as play.py's
-                H label numbers it, how it is reached, what it does while
+                L label numbers it, how it is reached, what it does while
                 it stands, what is on each object, where it is in the
                 backup (A4 landscape)
   backup        every stage full screen, one page per picture at the
@@ -49,7 +49,6 @@ RED = (0.75, 0.22, 0.17)
 BLUE = (0.18, 0.40, 0.56)
 DESK = (0.15, 0.28, 0.75)  # a step the desk can take too (the blue state block)
 STRIP_OFF = (0.92, 0.91, 0.88)  # a stage cell in the strip
-STRIP_ON = (0.40, 0.38, 0.35)  # ... one of this page's
 NIGHT = (0.04, 0.04, 0.04)
 WOOD = (0.16, 0.12, 0.08)
 GILT = (0.82, 0.67, 0.33)
@@ -186,6 +185,22 @@ class Doc:
         w = self.width(s, size, True) + 2 * pad
         self.rect(x, y, w, size + 2 * pad - 1, fill=fill, r=2)
         self.text(x + pad, y + size + pad - 1.5, s, size, True, color)
+        return w
+
+    def key(self, x, y, name, size=7.5):
+        """A key cap with its baseline at y (LEFT / RIGHT: an arrow, like
+        on the keys themselves; the standard fonts have none); returns its
+        width."""
+        arrow = name in (LEFT, RIGHT)
+        w = 16 if arrow else self.width(name, size, True) + 8
+        self.rect(x, y - size - 1.5, w, size + 5, fill=PAPER, stroke=MUTED, lw=0.6, r=2)
+        if arrow:
+            cy, d = y - size / 2 + 1, 1 if name == RIGHT else -1
+            tip, tail = x + w / 2 + d * 4.5, x + w / 2 - d * 4.5
+            self.line(tail, cy, tip - d * 2, cy, INK, 1.0)
+            self.poly([(tip, cy), (tip - d * 3.2, cy - 2.4), (tip - d * 3.2, cy + 2.4)], fill=INK)
+        else:
+            self.text(x + 4, y, name, size, True)
         return w
 
     def section(self, x, y, title):
@@ -326,40 +341,86 @@ def object_contents(stage, cfg):
 ENTRY = {'start': ('START', MUTED), 'key': ('KEY', GREEN), 'auto': ('AUTO', ORANGE)}
 
 
-def _strip(doc, y, stages, facts, highlight=()):
-    """All stages as numbered cells across the page (highlighted = the
-    ones on this page, drawn dark), with the step into each in the gap
-    before it: a green line = on a key, blue = on a key or by the desk (a
-    blackout on either side, see play.py), an orange wedge = by itself;
-    a black bar under a cell = blackout."""
+def _step_mark(doc, mid, y, kind, gap):
+    """The step into a stage, drawn in the gap before its cell (top at y):
+    key / desk a line, auto a wedge pointing on."""
+    if kind == 'auto':
+        w = gap / 2 + 1.5
+        doc.poly([(mid - w, y + 2), (mid + w, y + 7), (mid - w, y + 12)], fill=ORANGE)
+    else:
+        doc.rect(mid - 0.9, y - 1.5, 1.8, 17, fill=DESK if kind == 'desk' else GREEN)
+
+
+def _media_icon(doc, x, y, kind, color):
+    """A small icon, 7 x 5 pt with its top-left at (x, y): video a play
+    triangle, slideshow two stacked frames."""
+    if kind == 'video':
+        doc.poly([(x + 1.5, y), (x + 6.5, y + 2.5), (x + 1.5, y + 5)], fill=color)
+    else:
+        doc.rect(x + 2, y, 5, 3.6, stroke=color, lw=0.6)
+        doc.rect(x, y + 1.4, 5, 3.6, fill=STRIP_OFF, stroke=color, lw=0.6)
+
+
+def _stage_kinds(stage):
+    """The media kinds a stage shows, for the strip's icons."""
+    maps = stage.get('mappings', [])
+    return [k for k in ('slideshow', 'video') if any(k in m for m in maps)]
+
+
+def _strip(doc, y, stages, facts):
+    """All stages as numbered cells across the page, black for a blackout,
+    with an icon for a slideshow or a video; the step into each is drawn in
+    the gap before it: a green line = on a key, blue = on a key or by the
+    desk (a blackout on either side, see play.py), an orange wedge = by
+    itself."""
     n = len(stages)
     gap = 5 if n <= 40 else (3 if n <= 80 else 2)
     cell = (doc.w - 2 * M - gap * (n - 1)) / n
     for j in range(n):
         x = M + j * (cell + gap)
-        solid = j in highlight
-        doc.rect(x, y, cell, 14, fill=STRIP_ON if solid else STRIP_OFF)
+        dark = bool(stages[j].get('blackout'))
+        doc.rect(x, y, cell, 14, fill=NIGHT if dark else STRIP_OFF)
         if j:  # the step into stage j
-            mid = x - gap / 2
-            if facts[j]['entry'] == 'auto':
-                w = gap / 2 + 1.5
-                doc.poly([(mid - w, y + 2), (mid + w, y + 7), (mid - w, y + 12)], fill=ORANGE)
-            else:
-                desk = stages[j].get('blackout') or stages[j - 1].get('blackout')
-                doc.rect(mid - 0.9, y - 1.5, 1.8, 17, fill=DESK if desk else GREEN)
+            desk = dark or stages[j - 1].get('blackout')
+            kind = 'auto' if facts[j]['entry'] == 'auto' else ('desk' if desk else 'key')
+            _step_mark(doc, x - gap / 2, y, kind, gap)
         if cell >= 11:
             doc.text(
                 x + cell / 2,
                 y + 10,
                 str(j + 1),
                 6.5 if cell >= 15 else 5,
-                solid,
-                PAPER if solid else INK,
+                False,
+                PAPER if dark else INK,
                 'center',
             )
-        if stages[j].get('blackout'):
-            doc.rect(x, y + 11.5, cell, 2.5, fill=NIGHT)
+        if cell >= 30:
+            for k, kind in enumerate(_stage_kinds(stages[j])):
+                _media_icon(doc, x + cell - 10 - 9 * k, y + 4.5, kind, MUTED)
     return y + 14
+
+
+def _strip_legend(doc, x, y):
+    """What the strip's marks mean, drawn as they are, on one line from x
+    (baseline y)."""
+    for mark, key in (
+        ('key', 'legend.step_key'),
+        ('desk', 'legend.step_desk'),
+        ('auto', 'legend.step_auto'),
+        ('blackout', 'legend.blackout'),
+        ('slideshow', 'legend.slideshow'),
+        ('video', 'legend.video'),
+    ):
+        if mark in ('key', 'desk', 'auto'):
+            _step_mark(doc, x + 3, y - 10.5, mark, 5)
+            x += 9
+        elif mark == 'blackout':
+            doc.rect(x, y - 7, 10, 7, fill=NIGHT)
+            x += 13
+        else:
+            _media_icon(doc, x, y - 5.5, mark, MUTED)
+            x += 10
+        x += doc.text(x, y, tr(key), 7, color=MUTED) + 14
 
 
 def _page_head(doc, title, subtitle):
@@ -369,7 +430,18 @@ def _page_head(doc, title, subtitle):
     doc.text(doc.w - M, 30, subtitle, 8, color=MUTED, align='right')
 
 
-KEYS = ['next', 'back', 'twice', 'slide', 'h', 'q']  # i18n key.<k> and key.<k>_does
+LEFT, RIGHT = '<left>', '<right>'  # arrow keys, drawn (Doc.key)
+# the keys of the presentation: the caps (an i18n key for a translated
+# name) and i18n key.<k>_does
+KEYS = [
+    ('next', ['Enter', 'key.space', RIGHT]),
+    ('back', ['Backspace', LEFT]),
+    ('twice', [RIGHT, RIGHT]),
+    ('slide', ['<', '>']),
+    ('l', ['L']),
+    ('p', ['P']),
+    ('q', ['Q', 'Esc']),
+]
 BLOCKS = [  # colour, i18n block.<name> and block.<name>_means, blocks drawn
     (RED, 'red', 4),
     (ORANGE, 'orange', 4),
@@ -437,22 +509,17 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
     if description:
         y = doc.para(M, y + 4, description, 9, doc.w - 2 * M) + 2
     y = _strip(doc, y, stages, facts)
-    doc.text(
-        M,
-        y + 11,
-        tr('run.strip_legend'),
-        7,
-        color=MUTED,
-    )
+    _strip_legend(doc, M, y + 13)
 
     x2 = M + 380
     top = y + 42
     y = doc.section(M, top, tr('run.keys'))
-    for k in KEYS:
-        doc.rect(M, y - 9, 150, 13, fill=PANEL, r=2)
-        doc.text(M + 5, y, tr(f'key.{k}'), 8, True)
-        doc.text(M + 158, y, tr(f'key.{k}_does'), 8)
-        y += 16
+    for k, caps in KEYS:
+        x = M
+        for cap in caps:
+            x += doc.key(x, y, tr(cap) if cap.startswith('key.') else cap) + 4
+        below = doc.para(M + 158, y, tr(f'key.{k}_does'), 8, x2 - M - 168)
+        y = max(y + 16, below + 5)
     y = doc.section(M, y + 10, tr('run.blocks'))
     for col, name, count in BLOCKS:
         for b in range(count):
@@ -495,7 +562,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
 
     def head(first, last):
         _page_head(doc, tr('run.title'), source)
-        _strip(doc, 40, stages, facts, highlight=range(first, last + 1))
+        _strip(doc, 40, stages, facts)
         doc.text(M, 80, tr('run.cue_list', first=first + 1, last=last + 1, n=n), 14, True)
         y = 98
         cols = [
