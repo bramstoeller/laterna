@@ -375,7 +375,7 @@ def _strip(doc, y, scenes, facts, desk, on_page=None):
     black, with an icon for a slideshow or a video; the step into each is
     drawn in the gap before it: a green line = on a key, blue = on a key or
     by the desk (a blackout on either side, see play.py), an orange wedge =
-    by itself. on_page = (first, last): a bar under the scenes of this page."""
+    by itself. on_page = (first, last): a dimension line under this page's scenes."""
     n = len(scenes)
     gap = 5 if n <= 40 else (3 if n <= 80 else 2)
     cell = (doc.w - 2 * M - gap * (n - 1)) / n
@@ -405,7 +405,10 @@ def _strip(doc, y, scenes, facts, desk, on_page=None):
     if on_page:
         first, last = on_page
         x0, x1 = M + first * (cell + gap), M + last * (cell + gap) + cell
-        doc.rect(x0, y + 16.5, x1 - x0, 2, fill=MUTED)
+        # like a dimension in a technical drawing: a tick at either end, a line between
+        doc.line(x0, y + 18, x1, y + 18, MUTED, 0.8)
+        for x in (x0, x1):
+            doc.line(x, y + 15, x, y + 21, MUTED, 0.8)
     return y + 14
 
 
