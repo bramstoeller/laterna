@@ -73,12 +73,12 @@ def mmss(seconds):
 
 
 def secs(seconds):
-    return f'{num(seconds, 2)} s'
+    return f'{num(seconds, 2)}s'
 
 
 def duration(seconds):
-    """A duration in seconds under a minute, else in minutes: 55 s, 3 m, 2.5 m."""
-    return secs(seconds) if seconds < 60 else f'{num(seconds / 60, 1)} m'
+    """A duration in seconds under a minute, else in minutes: 55s, 3m, 2.5m."""
+    return secs(seconds) if seconds < 60 else f'{num(seconds / 60, 1)}m'
 
 
 def jpeg(image, max_width=None, quality=88):
