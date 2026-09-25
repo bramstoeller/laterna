@@ -8,6 +8,7 @@
 #   video: videos/<file>        a clip, looping inside the frame
 #   slideshow: [file, ...]      pictures in turn, `hold` seconds each
 #   fit: [ids]                  size the medium over several frames together
+#   spot: false                 no spot on this medium: lit evenly (text)
 # Per scene: hold (seconds before moving on by itself; none = wait for a
 # key), transition / transition_time, molding_color, fill_color, blackout.
 transition: fade

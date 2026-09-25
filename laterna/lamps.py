@@ -46,7 +46,9 @@ render.spot_ratio, strength look.spot_collapse): a real spot keeps its
 beam while it dims, but in a theatre the spots die before the rest of
 the light, so the bright patch goes first and the picture ends up lit
 evenly before it goes out. Without it a dimmed spot keeps a flat, over
-bright centre, which is what the light desk's master fader shows.
+bright centre, which is what the light desk's master fader shows. A
+picture with `spot: false` has no pool to flatten: on its objects the
+light is even at every level (Lamps.light's `no_spot`).
 """
 
 import functools
@@ -84,6 +86,13 @@ def lamp_gain(level, kelvin, white, amp):
     k = kelvin * linear**TUNGSTEN if linear > 0 else 1000.0
     tint = render.white_gain(min(max(k, 1000.0), 40000.0), white)
     return np.float32([level * t * a for t, a in zip(tint, amp)])
+
+
+def spot_free(scene):
+    """The ids of the objects a scene shows a picture on with `spot: false`."""
+    return frozenset(
+        i for m in scene.get('mappings', []) if m.get('spot') is False for i in m['objects']
+    )
 
 
 def _as_surface(image):
@@ -183,7 +192,7 @@ class Lamps:
             gains[oid] = pair
         return gains
 
-    def _band(self, item, live, molding, fade, gains):
+    def _band(self, item, live, molding, fade, gains, no_spot):
         rows, cols, parts = item
         if fade is None:
             pic = live[rows, cols].astype(np.float32)
@@ -207,6 +216,8 @@ class Lamps:
             if oid not in gains:
                 continue
             _, _, m, ratio_pic, ratio_mold = self.objects[oid]
+            if oid in no_spot:
+                ratio_pic = m  # an evenly lit picture: nothing to take out
             m = m[local]
             for part, ratio, gain in (
                 (pic, ratio_pic, gains[oid][0]),
@@ -220,15 +231,20 @@ class Lamps:
         np.clip(acc, 0.0, 255.0, out=acc)
         self.out[rows, cols] = acc  # truncates: with the noise, a dithered rounding
 
-    def light(self, dst, live, molding, levels, fade=None):
+    def light(self, dst, live, molding, levels, fade=None, no_spot=frozenset()):
         """Draw `live` (the scene as rendered, videos composited: an RGB
         uint8 image (h, w, 3)) onto the surface `dst` under the lamps at
         `levels`; `molding` is the scene's molding-only render. `fade` =
         (live, molding, t) of the scene being faded to, t running 0 -> 1:
-        the two are mixed before the light."""
+        the two are mixed before the light. `no_spot`: the objects whose
+        picture has no spot (spot_free), lit evenly as they dim."""
         if fade is None and self.plain and levels.is_full(self.white):
             dst.blit(_as_surface(live), (0, 0))
             return
         gains = self._gains(levels)
-        list(_executor().map(lambda item: self._band(item, live, molding, fade, gains), self.items))
+        list(
+            _executor().map(
+                lambda item: self._band(item, live, molding, fade, gains, no_spot), self.items
+            )
+        )
         dst.blit(self.out_surface, (0, 0))

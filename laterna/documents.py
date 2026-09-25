@@ -819,6 +819,8 @@ def _dim_v(doc, v, ya, yb, x, text, off=0.0, color=MUTED):
 
 
 def _value(v):
+    if isinstance(v, bool):
+        return 'true' if v else 'false'  # as YAML writes it
     if isinstance(v, float):
         return num(v, 3)
     if isinstance(v, (list, tuple)):
@@ -1304,7 +1306,7 @@ def _mapping_lines(m):
         lines = [f'video {base(m["video"])}']
     else:
         lines = [base(m.get('image', '?'))]
-    for key in ('fit', 'width', 'height'):
+    for key in ('fit', 'width', 'height', 'spot'):
         if key in m:
             lines.append(f'{key} {_value(m[key])}')
     return lines

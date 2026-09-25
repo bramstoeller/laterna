@@ -202,17 +202,18 @@ def _has_video(scene):
     return any(render.is_animated(m) for m in scene.get('mappings', []))
 
 
-def dim(screen, lights, get_full, molding, out, duration, clock, levels, overlay, pump):
+def dim(screen, lights, get_full, molding, out, duration, clock, levels, overlay, pump, no_spot):
     """Fade the light between a live scene (`get_full`, re-evaluated per tick
     so videos keep playing) and black, everything together like a master
     fader (`out` = into the blackout, else out of it), on top of what the
     desk asks (`levels`, called per tick), through the lamps (which redden
     it on the way); `overlay` draws what goes on top before each flip,
-    `pump` handles the events that may act during a fade."""
+    `pump` handles the events that may act during a fade; `no_spot`: the
+    scene's objects without a spot (lamps.spot_free)."""
 
     def frame(t):
         level = 1.0 - t if out else t
-        lights.light(screen, get_full(), molding, levels().scaled(level, level))
+        lights.light(screen, get_full(), molding, levels().scaled(level, level), no_spot=no_spot)
         overlay()
         pygame.display.flip()
 
@@ -302,22 +303,31 @@ def crossfade(
     levels,
     overlay,
     pump,
+    no_spot=(frozenset(), frozenset()),
 ):
     """Fade between two live scenes under the lamps, which mix them. The
     getters are re-evaluated every tick, so videos keep playing (and start
     playing) during the fade; `levels` (called per tick) is what the desk
-    asks."""
+    asks; `no_spot` = the two scenes' objects without a spot
+    (lamps.spot_free), the one of the scene that shows most."""
     if duration > 0:
         start = pygame.time.get_ticks()
         while True:
             t = (pygame.time.get_ticks() - start) / 1000.0 / duration
             if t >= 1.0 or pump():  # pump: True = cut this fade short
                 break
-            lights.light(screen, get_src(), mold_src, levels(), fade=(get_dst(), mold_dst, t))
+            lights.light(
+                screen,
+                get_src(),
+                mold_src,
+                levels(),
+                fade=(get_dst(), mold_dst, t),
+                no_spot=no_spot[t >= 0.5],
+            )
             overlay()
             pygame.display.flip()
             clock.tick(60)
-    lights.light(screen, get_dst(), mold_dst, levels())
+    lights.light(screen, get_dst(), mold_dst, levels(), no_spot=no_spot[1])
     overlay()
     pygame.display.flip()
 
@@ -571,7 +581,9 @@ def run(
         nonlocal shown, last_shown
         shown = desk.levels()
         last_shown = now()
-        lights.light(screen, frame_for(i), molding_for(i), shown)
+        lights.light(
+            screen, frame_for(i), molding_for(i), shown, no_spot=lamps.spot_free(scenes[i])
+        )
         overlay()
         pygame.display.flip()
 
@@ -666,6 +678,7 @@ def run(
                 desk.levels,
                 overlay,
                 pump,
+                lamps.spot_free(scenes[idx]),
             )  # lights out
         elif _is_blackout(scenes[idx]) and not _is_blackout(scenes[new]):
             dim(
@@ -679,6 +692,7 @@ def run(
                 desk.levels,
                 overlay,
                 pump,
+                lamps.spot_free(scenes[new]),
             )  # lights on
         else:
             crossfade(
@@ -693,6 +707,7 @@ def run(
                 desk.levels,
                 overlay,
                 pump,
+                (lamps.spot_free(scenes[idx]), lamps.spot_free(scenes[new])),
             )
         # step keys pressed during the fade went to pump(), not to the
         # queue: one press does nothing, two of the same carry on. What the
@@ -738,7 +753,9 @@ def run(
         )  # not the screen: a dummy display may not be canvas-sized
         t0 = pygame.time.get_ticks()
         for _ in range(20):
-            lights.light(out, frame_for(idx), molding_for(idx), demo)
+            lights.light(
+                out, frame_for(idx), molding_for(idx), demo, no_spot=lamps.spot_free(scenes[idx])
+            )
         ms = (pygame.time.get_ticks() - t0) / 20.0
         pathlib.Path('_renders').mkdir(exist_ok=True)
         pygame.image.save(out, '_renders/lamps.png')

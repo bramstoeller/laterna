@@ -190,6 +190,7 @@ class Mapping(Timing):
     fit: list[int] | None = None
     width: Positive | None = None
     height: Positive | None = None
+    spot: bool | None = None  # false: no look.spot on this medium (lit evenly)
 
     @model_validator(mode='after')
     def one_medium(self):

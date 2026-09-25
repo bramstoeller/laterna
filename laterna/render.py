@@ -754,9 +754,10 @@ def _cone_light(xs, ys, spot, lx, ly, ax, ay, d):
     return e / (d / r0)  # 1 at the aim point
 
 
-def image_gain_at(cfg, ids, xs, ys, ss=1):
+def image_gain_at(cfg, ids, xs, ys, ss=1, spot=True):
     """Brightness gain (n, 3) for image/video pixels (xs, ys) inside the
-    given objects (look.images / headroom x each object's spot), or None
+    given objects (look.images / headroom x each object's spot; without
+    the spot when `spot` is false: a mapping's `spot: false`), or None
     when it is 1 everywhere. The light's colour is not in here: the
     render is neutral, the lamps colour it (laterna/lamps.py)."""
     look = look_settings(cfg)
@@ -765,12 +766,12 @@ def image_gain_at(cfg, ids, xs, ys, ss=1):
     h, w = (int(v * ss) for v in reversed(cfg['canvas']))
     for obj in _objects(cfg, ids):
         member = _fill_mask((h, w), polys_px(cfg, [obj['id']], ss))[ys, xs]
-        spot = _spot_gain(cfg, obj, xs[member], ys[member], ss, on_images=True)
-        if spot is None and np.allclose(base, 1.0):
+        pool = _spot_gain(cfg, obj, xs[member], ys[member], ss, on_images=True) if spot else None
+        if pool is None and np.allclose(base, 1.0):
             continue
         if gain is None:
             gain = np.ones((len(xs), 3), np.float32)
-        gain[member] = base * (1.0 if spot is None else spot)
+        gain[member] = base * (1.0 if pool is None else pool)
     return gain
 
 
@@ -1145,6 +1146,9 @@ class SceneRenderer:
         self.molding_gain = np.tile(float(look['molding']) * white, (len(self.molding_idx), 1))
         self.fill_gain = {}  # object id -> [(flat indices, gain (n, 3))]
         self.image_gain = {}  # object id -> (n, 3) gain over inside_idx, or None
+        # the same without the spot (a mapping's `spot: false`), or None
+        flat = float(look['images']) / headroom(cfg)
+        self.image_gain_flat = None if abs(flat - 1.0) < 1e-6 else flat
         for o in cfg['objects']:
             oid = o['id']
             member = np.isin(self.molding_idx, self.inside_idx[oid], assume_unique=True)
@@ -1216,8 +1220,9 @@ class SceneRenderer:
                     self.ss,
                 )
                 for oid in m['objects']:  # brightness + spot on the image
-                    if self.image_gain[oid] is not None:
-                        flat[self.inside_idx[oid]] *= self.image_gain[oid]
+                    gain = self.image_gain[oid] if m.get('spot', True) else self.image_gain_flat
+                    if gain is not None:
+                        flat[self.inside_idx[oid]] *= gain
         # the frame's shadow on the picture, then the molding on top
         flat[self.fade_idx] *= self.fade[:, None]
         flat[self.molding_idx] = self.molding_colors((scene or {}).get('molding_color'))

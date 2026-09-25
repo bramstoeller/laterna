@@ -347,7 +347,7 @@ def build_specs(cfg, scene, base, alpha):
             remap = _remap_block(px - x0, py - y0)
         else:
             gx, gy, remap = xs, ys, None
-        gain = render.image_gain_at(cfg, m['objects'], gx, gy)
+        gain = render.image_gain_at(cfg, m['objects'], gx, gy, spot=m.get('spot', True))
         spec = {
             'kind': 'slideshow' if 'slideshow' in m else 'video',
             'gain': gain,  # brightness + spot (look), None when 1 everywhere
