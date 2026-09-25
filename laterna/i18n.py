@@ -125,8 +125,8 @@ TEXTS = {
         'nl': 'Kolommen',
     },
     'run.columns_note': {
-        'en': 'NEXT: how the show goes on to the next scene (AUTO: after how long) and the fade to it. Grey text = the same as the scene before. A row of small pictures = the combinations of a slideshow.',
-        'nl': 'VERDER: hoe de show naar de volgende scène gaat (AUTO: na hoe lang) en de fade daarheen. Grijze tekst = hetzelfde als de scène ervoor. Een rij kleine beelden = de combinaties van een slideshow.',
+        'en': 'NEXT: how the show goes on to the next scene (AUTO: after how long) and the fade to it. Grey text = the same as the scene before.',
+        'nl': 'VERDER: hoe de show naar de volgende scène gaat (AUTO: na hoe lang) en de fade daarheen. Grijze tekst = hetzelfde als de scène ervoor.',
     },
     'col.picture': {
         'en': 'picture',
@@ -483,6 +483,10 @@ TEXTS = {
     'col.next': {
         'en': 'next',
         'nl': 'verder',
+    },
+    'run.columns_slides': {
+        'en': 'A row of small pictures = the combinations of a slideshow.',
+        'nl': 'Een rij kleine beelden = de combinaties van een slideshow.',
     },
 }
 

@@ -412,9 +412,17 @@ def _strip(doc, y, scenes, facts, desk, on_page=None):
     return y + 14
 
 
-def _strip_legend(doc, x, y, desk=True):
+def _media_kinds(scenes):
+    """The kinds of media the show has at all: a set of 'slideshow', 'video'."""
+    return {
+        k for s in scenes for m in s.get('mappings', []) for k in ('slideshow', 'video') if k in m
+    }
+
+
+def _strip_legend(doc, x, y, desk=True, kinds=('slideshow', 'video')):
     """What the strip's marks mean, drawn as they are, on one line from x
-    (baseline y); `desk` False leaves the desk's steps out (no desk)."""
+    (baseline y); only what the show has: `desk` False leaves the desk's
+    steps out (no desk), `kinds` the media icons."""
     for mark, key in (
         ('key', 'legend.step_key'),
         ('desk', 'legend.step_desk'),
@@ -423,7 +431,7 @@ def _strip_legend(doc, x, y, desk=True):
         ('slideshow', 'legend.slideshow'),
         ('video', 'legend.video'),
     ):
-        if mark == 'desk' and not desk:
+        if (mark == 'desk' and not desk) or (mark in ('slideshow', 'video') and mark not in kinds):
             continue
         if mark in ('key', 'desk', 'auto'):
             _step_mark(doc, x + 3, y - 10.5, mark, 5)
@@ -505,7 +513,8 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     # --- cover ------------------------------------------------------------
     _page_head(doc, tr('run.title'))
     y = _strip(doc, 40, scenes, facts, desk)  # at the top, as on the other pages
-    _strip_legend(doc, M, y + 13, any(desk))
+    kinds = _media_kinds(scenes)
+    _strip_legend(doc, M, y + 13, any(desk), kinds)
     y += 30
     doc.line(M, y, doc.w - M, y)
     if description:
@@ -516,6 +525,8 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     top = y + 20
     y = doc.section(M, top, tr('run.keys'))
     for k, caps in KEYS:
+        if k == 'slide' and 'slideshow' not in kinds:
+            continue
         x = M
         for cap in caps:
             x += doc.key(x, y, tr(cap) if cap.startswith('key.') else cap, 8.5) + 4
@@ -523,6 +534,8 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
         y = max(y + 19, below + 6)
     y = doc.section(M, y + 18, tr('run.blocks'))
     for col, name, count in BLOCKS:
+        if name == 'grey' and not kinds:  # the clips' bars: no slideshow or video
+            continue
         for b in range(count):
             corner = b == (0 if name == 'grey' else count - 1)
             bx = M + b * 6 + (18 if count == 1 else 0)
@@ -543,7 +556,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     doc.para(
         x2,
         y,
-        tr('run.columns_note'),
+        tr('run.columns_note') + (' ' + tr('run.columns_slides') if 'slideshow' in kinds else ''),
         9,
         doc.w - M - x2,
         color=MUTED,
