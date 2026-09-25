@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""Export: four PDFs of the loaded config.yaml and scenes.yaml, written to
-_export/ next to config.yaml (laterna/documents.py lays them out), named
-in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf):
+"""Export: four PDFs and a pptx of the loaded config.yaml and scenes.yaml,
+written to _export/ next to config.yaml (laterna/documents.py lays the PDFs
+out), named in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
@@ -18,6 +18,9 @@ in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf):
                  distinct combination of its pictures, a video as its
                  first frame; with the keystone warp of config.yaml, like
                  the presentation (the others show the plane)
+  backup.pptx    the same pictures as slides, played like the show: fades,
+                 slideshow changes at their time, holds moving on by
+                 themselves, the rest on a click or key (laterna/slides.py)
   scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
                  blackout, colours and what each object shows (no
                  descriptions: the values only)
@@ -42,7 +45,7 @@ import cv2
 import numpy as np
 import pygame
 
-from . import dmx, documents, frame, render, ui, video
+from . import dmx, documents, frame, render, slides, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_export'
@@ -52,6 +55,7 @@ FILES = {
     'en': ('backup.pdf', 'cue-sheet.pdf', 'config.pdf', 'scenes.pdf'),
     'nl': ('backup.pdf', 'draaiboek.pdf', 'configuratie.pdf', 'scenes.pdf'),
 }
+SLIDES = 'backup.pptx'  # the backup as slides, with fades and holds (laterna/slides.py)
 MAX_COMBINATIONS = 64  # slideshow pictures per scene in the export
 THUMB_WIDTH = 480  # px of the cue list pictures
 
@@ -124,11 +128,13 @@ def _stem(path):
 
 
 def _pictures(cfg, renderer, scene, first_only=False):
-    """[(t, picture names, RGB image, slides)] of a scene as rendered
+    """[(t, picture names, RGB image, slides, fade)] of a scene as rendered
     (unlit), one per distinct combination of slideshow pictures (only the
     first with `first_only`), videos and video slides at their first
     frame; t = seconds after entering, the names those of the slideshow
-    pictures, slides {id(mapping): the picture shown} of its slideshows."""
+    pictures, slides {id(mapping): the picture shown} of its slideshows,
+    fade the seconds the change to it takes (the longest transition_time
+    of the slideshows that change; 0 for the first)."""
     lut = render.gamma_lut(cfg)
     base = renderer.render(scene)
     alpha = renderer.video_alpha(scene)
@@ -146,7 +152,7 @@ def _pictures(cfg, renderer, scene, first_only=False):
                 clip.cap.release()
             if frame is not None:
                 fixed.append((spec, video._compose_rows(video._fit_region(frame, spec), spec, lut)))
-    out = []
+    out, before = [], None
     for t, combo in slide_combinations([spec['timing'] for spec, _ in shows]):
         image = base.copy()
         flat = image.reshape(-1, 3)
@@ -158,7 +164,16 @@ def _pictures(cfg, renderer, scene, first_only=False):
             flat[spec['flat']] = rows
             names.append(_stem(m['slideshow'][k]))
             slides[id(m)] = k
-        out.append((t, names, image, slides))
+        fade = max(
+            (
+                float(spec['timing'][2])
+                for (spec, _), a, b in zip(shows, before or combo, combo)
+                if a != b
+            ),
+            default=0.0,
+        )
+        before = combo
+        out.append((t, names, image, slides, fade))
         if first_only:
             break
     for spec, _ in shows:
@@ -220,13 +235,14 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
     `projector` (a config with its keystone; None = as rendered), or None
     (blackout), 'thumb':
     RGB crop for the cue list or None, 't': seconds after entering,
-    'changed': [picture names new in this view]}], one per distinct
+    'fade': seconds the change to it takes, 'changed': [picture names new
+    in this view]}], one per distinct
     combination of slideshow pictures, videos at their first frame."""
     box = crop_box(cfg)
     if scene.get('blackout'):
-        return [{'full': None, 'thumb': None, 't': 0.0, 'changed': []}]
+        return [{'full': None, 'thumb': None, 't': 0.0, 'fade': 0.0, 'changed': []}]
     views, before = [], None
-    for t, names, out, slides in _pictures(cfg, renderer, scene):
+    for t, names, out, picked, fade in _pictures(cfg, renderer, scene):
         changed = [n for j, n in enumerate(names) if before is None or before[j] != n]
         before = names
         image = lit(out, gain)
@@ -234,11 +250,13 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
         ok, buf = cv2.imencode(
             '.jpg', cv2.cvtColor(full, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92]
         )
-        thumb = documents.crop(plain_view(cfg, scene, slides), box)
+        thumb = documents.crop(plain_view(cfg, scene, picked), box)
         if thumb.shape[1] > THUMB_WIDTH:
             th = max(1, round(thumb.shape[0] * THUMB_WIDTH / thumb.shape[1]))
             thumb = cv2.resize(thumb, (THUMB_WIDTH, th), interpolation=cv2.INTER_AREA)
-        views.append({'full': buf.tobytes(), 'thumb': thumb, 't': t, 'changed': changed})
+        views.append(
+            {'full': buf.tobytes(), 'thumb': thumb, 't': t, 'fade': fade, 'changed': changed}
+        )
     return views
 
 
@@ -359,7 +377,7 @@ def dmx_info(cfg):
 def export_all(
     config='config.yaml', scenes_path='scenes.yaml', out_dir=None, supersample=3, progress=print
 ):
-    """Render and write the four PDFs; returns their paths. progress(text)
+    """Render and write the four PDFs and backup.pptx; returns their paths. progress(text)
     is called between the steps (and may raise Cancelled)."""
     config, scenes_path = pathlib.Path(config), pathlib.Path(scenes_path)
     cfg = render.load_config(config)
@@ -391,6 +409,8 @@ def export_all(
     paths = [out / name for name in names]
     progress(f'writing {paths[0].name}...')
     documents.backup(paths[0], cfg, scenes, views)
+    progress(f'writing {SLIDES}...')
+    slides.write(out / SLIDES, cfg, scenes, fades, views, f'{documents.show_name(cfg)} · {SLIDES}')
     progress(f'writing {paths[1].name}...')
     documents.run_sheet(
         paths[1],
@@ -408,7 +428,7 @@ def export_all(
     )
     progress(f'writing {paths[3].name}...')
     documents.scenes_sheet(paths[3], cfg, scenes, fades, data, source)
-    return paths
+    return paths[:1] + [out / SLIDES] + paths[1:]
 
 
 def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):
@@ -436,7 +456,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
                 raise Cancelled
         done.append(text)
         draw(
-            ['export: rendering every scene, then four PDFs', '']
+            ['export: rendering every scene, then four PDFs and the slides', '']
             + done[-30:]
             + ['', 'Q / Esc cancels']
         )
@@ -458,7 +478,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
 
 def main():
     ap = argparse.ArgumentParser(
-        description='Export config, cue sheet, backup and scenes as PDF (headless)'
+        description='Export config, cue sheet, backup and scenes as PDF, the backup as pptx (headless)'
     )
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--scenes', default='scenes.yaml')

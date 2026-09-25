@@ -357,6 +357,12 @@ def _scene_kinds(scene):
     return [k for k in ('slideshow', 'video') if any(k in m for m in maps)]
 
 
+def _warning(doc, x, y, size=11):
+    """A warning triangle with an exclamation mark, its top-left at (x, y)."""
+    doc.poly([(x + size / 2, y), (x + size, y + size * 0.9), (x, y + size * 0.9)], fill=RED)
+    doc.text(x + size / 2, y + size * 0.82, '!', size * 0.62, True, PAPER, 'center')
+
+
 def desk_steps(cfg, scenes, facts):
     """Per scene: whether the desk can take the show into it too (a key
     step next to a blackout, see play.py), with a desk configured."""
@@ -646,6 +652,8 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
                 w = doc.label(X_IN, y + 7, label, ENTRY[nxt['entry']][1])
                 if desk[i + 1]:  # the desk can take this step too
                     doc.label(X_IN + w + 3, y + 7, 'DMX', DESK)
+                elif nxt['entry'] == 'key' and any(desk):  # the desk can not: mind the key
+                    _warning(doc, X_IN + w + 3, y + 6.5)
                 doc.text(X_IN, y + 29, tr('run.fade', t=secs(nxt['fade'])), 8, color=MUTED)
                 if desk[i + 1]:
                     doc.text(X_IN, y + 39, tr('run.or_dmx'), 8, color=MUTED)

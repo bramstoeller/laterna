@@ -15,7 +15,7 @@ The apps, in show order:
   3  global alignment  (scale, rotation, position -> config.yaml)
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
-  6  export            (config, cue sheet, backup and scenes as PDF -> _export/)
+  6  export            (config, cue sheet, backup and scenes as PDF, backup.pptx -> _export/)
   7  present           (play the scenes from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse
