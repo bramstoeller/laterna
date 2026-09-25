@@ -229,8 +229,8 @@ TEXTS = {
         'nl': 'buitenranden {mm} mm',
     },
     'config.setup_note': {
-        'en': 'Black = the whole projector picture on the frame plane at the set scale. Red dot = origin of an object (middle of its bottom plank). Light numbers between frames = the gap, wood to wood, in mm.',
-        'nl': 'Zwart = het hele beamerbeeld op het framevlak bij de ingestelde schaal. Rode stip = oorsprong van een object (midden van de onderplank). Lichte getallen tussen de lijsten = de tussenruimte, hout tot hout, in mm.',
+        'en': 'Black = the whole projector picture on the frame plane at the set scale. Red dot = origin of an object (middle of the bottom of its frame). Light numbers between frames = the gap, frame to frame, in mm.',
+        'nl': 'Zwart = het hele beamerbeeld op het lijstvlak bij de ingestelde schaal. Rode stip = oorsprong van een object (midden van de onderkant van de lijst). Lichte getallen tussen de lijsten = de tussenruimte, lijst tot lijst, in mm.',
     },
     'config.global': {
         'en': 'Global',
@@ -238,7 +238,7 @@ TEXTS = {
     },
     'config.picture_on_plane': {
         'en': 'picture on frame plane',
-        'nl': 'beeld op framevlak',
+        'nl': 'beeld op lijstvlak',
     },
     'unit.deg': {
         'en': '{v} deg',
@@ -261,32 +261,32 @@ TEXTS = {
         'nl': 'naam',
     },
     'col.wood_mm': {
-        'en': 'wood mm',
-        'nl': 'hout mm',
+        'en': 'frame mm',
+        'nl': 'lijst mm',
     },
     'config.wood_note': {
-        'en': 'Wood = outer contour of the frame (mitred, before the rounding).',
-        'nl': 'Hout = buitencontour van de lijst (verstek, vóór de afronding).',
+        'en': 'Frame = its outer contour (mitred, before the rounding).',
+        'nl': 'Lijst = de buitencontour (verstek, vóór de afronding).',
     },
     'config.origin': {
         'en': 'origin',
         'nl': 'oorsprong',
     },
     'config.wood_size': {
-        'en': 'wood {v} mm',
-        'nl': 'hout {v} mm',
+        'en': 'frame {v} mm',
+        'nl': 'lijst {v} mm',
     },
     'config.canvas_size': {
         'en': 'canvas {v} mm',
         'nl': 'doek {v} mm',
     },
     'legend.wood': {
-        'en': 'wood (outer contour, mitred)',
-        'nl': 'hout (buitencontour, verstek)',
+        'en': 'frame (outer contour, mitred)',
+        'nl': 'lijst (buitencontour, verstek)',
     },
     'legend.molding': {
         'en': 'projected molding (rounded)',
-        'nl': 'geprojecteerde lijst (afgerond)',
+        'nl': 'geprojecteerde molding (afgerond)',
     },
     'legend.canvas': {
         'en': 'canvas = picture area',
@@ -314,15 +314,15 @@ TEXTS = {
     },
     'config.molding': {
         'en': 'Molding and light',
-        'nl': 'Lijst en licht',
+        'nl': 'Molding en licht',
     },
     'config.molding_note': {
         'en': 'Every canvas white, at full light, top of the largest frame: the profile, the fixed light direction and the shadow the molding throws on the canvas.',
-        'nl': 'Elk doek wit, bij vol licht, bovenkant van de grootste lijst: het profiel, de vaste lichtrichting en de schaduw die de lijst op het doek werpt.',
+        'nl': 'Elk doek wit, bij vol licht, bovenkant van de grootste lijst: het profiel, de vaste lichtrichting en de schaduw die de molding op het doek werpt.',
     },
     'look.molding': {
         'en': 'brightness of the molding',
-        'nl': 'helderheid van de lijst',
+        'nl': 'helderheid van de molding',
     },
     'look.fill': {
         'en': 'brightness of the fill (no picture)',
@@ -344,7 +344,7 @@ TEXTS = {
         'en': 'spot flattens as the light dims (0 = off)',
         'nl': 'spot vlakt af als het licht dimt (0 = uit)',
     },
-    'look.plank_depth': {
+    'look.frame_depth': {
         'en': 'parallax strip, mm (0 = off)',
         'nl': 'parallaxstrook, mm (0 = uit)',
     },

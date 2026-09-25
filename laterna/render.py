@@ -539,7 +539,7 @@ LOOK_DEFAULTS = {
     'spot_collapse': 1.0,  # how far the light pool flattens as a lamp dims: 0 = the beam
     # keeps its shape, 1 = at the bottom of the fader the picture is
     # lit evenly, as if the spots died before the rest of the light
-    'plank_depth': 0.0,  # mm the cloth sits behind the wood's front: pictures keep
+    'frame_depth': 0.0,  # mm the cloth sits behind the wood's front: pictures keep
     # off the planks' side faces (needs `projector:`); 0 = off
     # the spot on the pictures and the fill colour (per object, placed
     # relative to its bounding box; fractions: x 0..1 left to right, y 0
@@ -879,8 +879,8 @@ def image_polys_px(cfg, ids=None, ss=1):
     """The projection mask for pictures on the given objects (all when
     None), in canvas px: their canvas polygons (the picture areas).
 
-    With look.plank_depth > 0 and a `projector:` block the strip along the
-    wood whose light would miss the cloth (mounted plank_depth behind the
+    With look.frame_depth > 0 and a `projector:` block the strip along the
+    wood whose light would miss the cloth (mounted frame_depth behind the
     wood's front) and light the planks' side faces is cut off. A ray
     through a point p of the front plane reaches the cloth at p moved away
     from the projector by depth / distance, so the lit cloth is the canvas
@@ -888,7 +888,7 @@ def image_polys_px(cfg, ids=None, ss=1):
     depth); the mask is the canvas clipped to that. The cloth itself loses
     nothing: it is reached by rays from a little further in."""
     look = look_settings(cfg)
-    depth, projector = float(look['plank_depth']), cfg.get('projector')
+    depth, projector = float(look['frame_depth']), cfg.get('projector')
     out = []
     for o in _objects(cfg, ids):
         for p in object_canvas_world(cfg, o):
@@ -1122,7 +1122,7 @@ class SceneRenderer:
         interactive app can call it after every change."""
         cfg, ss, w = self.cfg, self.ss, self.shape[1]
         look = look_settings(cfg)
-        # the picture masks depend on look.plank_depth; the strip of canvas
+        # the picture masks depend on look.frame_depth; the strip of canvas
         # they leave out (the parallax strip) stays black, whatever is shown
         self.image_polys = {o['id']: image_polys_px(cfg, [o['id']], ss) for o in cfg['objects']}
         self.strip_idx = np.flatnonzero(

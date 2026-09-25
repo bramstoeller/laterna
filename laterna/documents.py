@@ -821,7 +821,7 @@ def _value(v):
 
 
 # the look and spot keys with a note (i18n look.<key>, spot.<key>)
-LOOK_NOTES = ('molding', 'fill', 'images', 'temperature', 'white', 'spot_collapse', 'plank_depth')
+LOOK_NOTES = ('molding', 'fill', 'images', 'temperature', 'white', 'spot_collapse', 'frame_depth')
 SPOT_NOTES = (
     'type',
     'strength',
@@ -946,7 +946,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             [
                 ('position', _value(proj['position']) + ' mm'),
                 ('distance', f'{num(proj["distance"])} mm'),
-                ('plank_depth', tr('unit.mm_off', v=num(look.get('plank_depth', 0)))),
+                ('frame_depth', tr('unit.mm_off', v=num(look.get('frame_depth', 0)))),
             ],
             [100, 125],
         )
@@ -1066,7 +1066,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
                 ('origin', _value([float(c) for c in g['origin']]) + ' mm'),
                 ('scale', num(g['scale'], 4)),
                 ('rotation', tr('unit.deg', v=num(g['rotation'], 3))),
-                ('border (plank)', f'{num(g["border"])} mm'),
+                ('border', f'{num(g["border"])} mm'),
                 ('pixels', f'x {num(bx0, 1)}-{num(bx1, 1)}, y {num(by0, 1)}-{num(by1, 1)}'),
             ],
             [85, 200],

@@ -111,7 +111,7 @@ class Look(Node):
     temperature: Annotated[float, Field(ge=1000, le=40000)] | None = None
     white: Annotated[float, Field(ge=1000, le=40000)] | None = None
     spot_collapse: Fraction | None = None
-    plank_depth: NonNegative | None = None
+    frame_depth: NonNegative | None = None
     spot: Spot | None = None
     molding_spot: Spot | None = None
 
@@ -329,7 +329,13 @@ def check(model, data, what, context=None):
 
 
 def check_config(data, what='config.yaml'):
-    return check(Config, data if data is not None else {}, what)
+    data = data if data is not None else {}
+    look = data.get('look') if isinstance(data, dict) else None
+    if isinstance(look, dict) and 'plank_depth' in look and 'frame_depth' not in look:
+        # the older name of look.frame_depth
+        look = {('frame_depth' if k == 'plank_depth' else k): v for k, v in look.items()}
+        data = {**data, 'look': look}
+    return check(Config, data, what)
 
 
 def check_scenes(data, ids, what='scenes.yaml'):

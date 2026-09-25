@@ -70,7 +70,7 @@ PAGE_LOOK = (
         ('spot strength', ('spot', 'strength'), 0.05, 0.0, 1.0),
         ('spot on images', ('spot', 'images'), 0.05, 0.0, 1.0),
         ('spot on fill', ('spot', 'fill'), 0.05, 0.0, 1.0),
-        ('plank depth (mm, 0 = off)', ('plank_depth',), 1.0, 0.0, 50.0),
+        ('frame depth (mm, 0 = off)', ('frame_depth',), 1.0, 0.0, 50.0),
     ],
 )
 

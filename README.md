@@ -2,13 +2,13 @@
 
 Projection mapping for stage frames (laterna: Latin for lantern, as in
 laterna magica). One projector lights a set of physical picture frames:
-laterna draws a virtual gilded molding exactly on the wood, fits
+laterna draws a virtual gilded molding exactly on the frames, fits
 pictures, slideshows and videos inside, lights them with pretend
 spotlights and steps through the show's scenes on a key press or from a
 lighting desk (sACN, Art-Net or an Enttec USB DMX interface).
 
 ![The example show: two frames with a public-domain painting each, a gilded
-molding drawn on the wood and a pretend spotlight](docs/example.jpg)
+molding drawn on the frames and a pretend spotlight](docs/example.jpg)
 
 *The example show (`shows/example/`), rendered: two frames, a painting in
 each, the gilded molding and the pretend spotlights drawn by laterna.*
@@ -61,7 +61,7 @@ In show order, each saving what it sets to `config.yaml`:
 2. **Dynamic range**: near-black/white steps, gamma chart
 3. **Global alignment**: keystone (only for a tilted projector), then scale,
    rotation and position of the image
-4. **Shape calibration**: move the frames' corners onto the wood
+4. **Shape calibration**: move the frames' corners onto the real frames
 5. **Look**: brightness per layer, spotlights, colour temperature
 6. **Export**: config sheet, run sheet and backup as PDF
 7. **Present**: play the scenes from `scenes.yaml`
