@@ -376,7 +376,8 @@ BLOCKS = [
         (0.35, 0.35, 0.35),
         'grey',
         4,
-        'top left, one row per slideshow or video: counts down to the next picture / the restart',
+        'top left, one row per timing (shows in step share one): counts down hold + fade '
+        'to the next picture / the restart',
     ),
 ]
 

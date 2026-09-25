@@ -34,10 +34,12 @@ the stage keys (Enter, space, the arrows) leave the slideshow and move
 between stages as always.
 
 The slideshows and videos inside a stage get their own bars in the top
-LEFT corner, one row per clip in the order the stage maps them, growing
-to the right and in dark grey so they stay out of the way: counting down
-to the next picture, or to the moment a video starts over. A stage with
-two shows of different lengths shows two rows, each on its own clock.
+LEFT corner, one row per distinct timing in the order the stage maps
+them, growing to the right and in dark grey so they stay out of the way:
+counting down hold + fade to the next picture fully in, or to the moment
+a video starts over. Shows that run in step (same timing, same moment)
+share one row; two shows of different lengths get two rows, each on its
+own clock.
 
 A stage with `hold: <seconds>` (its own or the global default at the top
 of scenes.yaml) moves on to the next stage by itself that long after its
@@ -468,17 +470,21 @@ def run(
         show(idx)
 
     def clip_states(i):
-        """[(a fade is running, seconds left)] for stage i's slideshows and
-        videos, in the order the stage maps them: a bar each."""
+        """[(a fade is running, seconds left, the whole stretch)] for stage
+        i's slideshows and videos, in the order the stage maps them: a bar
+        per distinct timing (clips in step share one)."""
         player = players.get(i)
         out, seen = [], set()
         for spec in player.specs if player else ():
             clip = player.clips[spec['path']]
-            if spec['path'] in seen or clip.t0 is None:
+            if clip.t0 is None:
                 continue
-            seen.add(spec['path'])
             state = clip.next_change(now() - clip.t0)
-            if state is not None:
+            if state is None:
+                continue
+            key = (round(state[1], 1), state[2])  # in step: the same countdown
+            if key not in seen:
+                seen.add(key)
                 out.append(state)
         return out
 

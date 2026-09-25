@@ -144,16 +144,14 @@ class SlideshowClip:
         return state
 
     def next_change(self, t):
-        """(a transition is running, seconds until it ends or starts, the
-        whole stretch it is counting down) at t seconds into the timeline:
-        what the slideshow's own row of the state bar shows (laterna/play.py).
+        """(a transition is running, seconds until the next picture is fully
+        in, the whole stretch: hold + fade) at t seconds into the timeline:
+        what the slideshow's row of the state bar shows (laterna/play.py).
         None when the show has one slide and nothing ever changes."""
         if self.count < 2 or self.slot <= 0:
             return None
         _, phase = self._phase(t)
-        if phase < self.hold:
-            return False, self.hold - phase, self.hold
-        return True, self.slot - phase, self.transition_time
+        return phase >= self.hold, self.slot - phase, self.slot
 
     def step(self, t, delta):
         """Where to continue the timeline when the operator steps a
