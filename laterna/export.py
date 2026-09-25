@@ -245,7 +245,7 @@ def config_renders(cfg, renderer, scenes, gain):
         int(min(w, bx1 + 0.1 * mw)),
         int(min(h, by0 + 0.6 * mh)),
     )
-    extras['molding_detail'] = documents.crop(lit(renderer.render(None), gain), detail)
+    extras['molding_detail'] = documents.crop(extras['white_flat'], detail)
     # the spot's strength on the pictures, per pixel, as a false-colour map
     strength = np.zeros((h, w), np.float32)
     for o in cfg['objects']:

@@ -317,8 +317,8 @@ TEXTS = {
         'nl': 'Lijst en licht',
     },
     'config.molding_note': {
-        'en': 'Render without pictures (the fill) at full light, top of the largest frame: the profile, the fixed light direction and the shadow the molding throws on the canvas.',
-        'nl': 'Render zonder beelden (de vulling) bij vol licht, bovenkant van de grootste lijst: het profiel, de vaste lichtrichting en de schaduw die de lijst op het doek werpt.',
+        'en': 'Every canvas white, at full light, top of the largest frame: the profile, the fixed light direction and the shadow the molding throws on the canvas.',
+        'nl': 'Elk doek wit, bij vol licht, bovenkant van de grootste lijst: het profiel, de vaste lichtrichting en de schaduw die de lijst op het doek werpt.',
     },
     'look.molding': {
         'en': 'brightness of the molding',
