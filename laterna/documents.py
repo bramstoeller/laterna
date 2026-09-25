@@ -1330,37 +1330,55 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
     def color(s, key):
         return [_value(list(s[key]))] if key in s else []
 
-    # (name, fixed width or None = a share of the rest, bold, lines per scene)
+    # (name, the media columns that may wrap, bold, lines per scene)
     columns = [
-        ('#', 20, True, [[str(i + 1)] for i in range(len(scenes))]),
-        ('name', 130, True, [[str(s.get('name', ''))] for s in scenes]),
-        ('hold', 30, False, [[] if s.get('hold') is None else [num(s['hold'], 2)] for s in scenes]),
-        ('fade', 30, False, [[num(f, 2)] for f in fades] + [[]]),
-        ('molding_color', 70, False, [color(s, 'molding_color') for s in scenes]),
-        ('fill_color', 70, False, [color(s, 'fill_color') for s in scenes]),
+        ('#', False, True, [[str(i + 1)] for i in range(len(scenes))]),
+        ('name', False, True, [[str(s.get('name', ''))] for s in scenes]),
+        (
+            'hold',
+            False,
+            False,
+            [[] if s.get('hold') is None else [num(s['hold'], 2)] for s in scenes],
+        ),
+        ('fade', False, False, [[num(f, 2)] for f in fades] + [[]]),
+        ('molding_color', False, False, [color(s, 'molding_color') for s in scenes]),
+        ('fill_color', False, False, [color(s, 'fill_color') for s in scenes]),
     ]
     if len(objects) <= 4:
         for o in objects:
             name = f'object {o["id"]} {o.get("name", "")}'.strip()
-            columns.append((name, None, False, [media(s, [o['id']]) for s in scenes]))
+            columns.append((name, True, False, [media(s, [o['id']]) for s in scenes]))
     else:
         ids = [o['id'] for o in objects]
-        columns.append(('mappings', None, False, [media(s, ids) for s in scenes]))
+        columns.append(('mappings', True, False, [media(s, ids) for s in scenes]))
     columns = [c for c in columns if any(c[3])]  # empty for every scene: left out
-    fixed = sum(c[1] for c in columns if c[1])
-    shares = sum(1 for c in columns if c[1] is None)
-    rest = (doc.w - 2 * M - fixed) / shares if shares else 0
+    # each column as narrow as its widest value (or name); what is left of
+    # the page stays empty on the right. Too wide for the page: the media
+    # columns share what the others leave, and wrap
+    widths = [
+        max(
+            [doc.width(c[0].upper(), 6.5, True)]
+            + [doc.width(line, size, c[2]) for lines in c[3] for line in lines]
+        )
+        for c in columns
+    ]
+    gap = 10
+    room = doc.w - 2 * M - gap * len(columns)
+    if sum(widths) > room:
+        fixed = sum(w for c, w in zip(columns, widths) if not c[1])
+        wraps = sum(1 for c in columns if c[1])
+        share = (room - fixed) / wraps if wraps else 0
+        widths = [min(w, share) if c[1] else w for c, w in zip(columns, widths)]
     xs, x = [], M
-    for c in columns:
+    for w in widths:
         xs.append(x)
-        x += c[1] or rest
-    widths = [(c[1] or rest) - 6 for c in columns]
+        x += w + gap
 
     def head(y):
         """The column names with their top at y; returns the first row's baseline."""
         for c, x, w in zip(columns, xs, widths):
             doc.text(x, y + 6, doc.fit(c[0].upper(), 6.5, w + 2, True), 6.5, True, MUTED)
-        doc.line(M, y + 10, doc.w - M, y + 10)
+        doc.line(M, y + 10, xs[-1] + widths[-1], y + 10)
         return y + 20
 
     # the file's defaults
@@ -1381,7 +1399,7 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
             _page_head(doc, tr('scenes.title'))
             y = head(44)
         if i % 2 == 0:
-            doc.rect(M - 3, y - size - 2, doc.w - 2 * M + 6, h, fill=PANEL)
+            doc.rect(M - 3, y - size - 2, xs[-1] + widths[-1] - M + 6, h, fill=PANEL)
         for x, lines, bold in row:
             for k, line in enumerate(lines):
                 doc.text(x, y + k * lead, line, size, bold)
