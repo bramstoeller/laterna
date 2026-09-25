@@ -434,7 +434,7 @@ def _strip_legend(doc, x, y, desk=True):
         else:
             _media_icon(doc, x, y - 5.5, mark, MUTED)
             x += 10
-        x += doc.text(x, y, tr(key), 7, color=MUTED) + 14
+        x += doc.text(x, y, tr(key), 8, color=MUTED) + 16
 
 
 def _page_head(doc, title):
@@ -506,20 +506,23 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     _page_head(doc, tr('run.title'))
     y = 44
     if description:
-        y = doc.para(M, y + 4, description, 9, doc.w - 2 * M) + 2
+        y = doc.para(M, y + 4, description, 10, doc.w - 2 * M) + 8
+        doc.line(M, y - 4, doc.w - M, y - 4)
+        y += 8
     y = _strip(doc, y, scenes, facts, desk)
     _strip_legend(doc, M, y + 13, any(desk))
 
     x2 = M + 380
-    top = y + 42
+    doc.line(M, y + 30, doc.w - M, y + 30)
+    top = y + 50
     y = doc.section(M, top, tr('run.keys'))
     for k, caps in KEYS:
         x = M
         for cap in caps:
-            x += doc.key(x, y, tr(cap) if cap.startswith('key.') else cap) + 4
-        below = doc.para(M + 158, y, tr(f'key.{k}_does'), 8, x2 - M - 168)
-        y = max(y + 16, below + 5)
-    y = doc.section(M, y + 10, tr('run.blocks'))
+            x += doc.key(x, y, tr(cap) if cap.startswith('key.') else cap, 8.5) + 4
+        below = doc.para(M + 170, y, tr(f'key.{k}_does'), 9, x2 - M - 180)
+        y = max(y + 19, below + 6)
+    y = doc.section(M, y + 18, tr('run.blocks'))
     for col, name, count in BLOCKS:
         for b in range(count):
             corner = b == (0 if name == 'grey' else count - 1)
@@ -531,18 +534,18 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
                 4,
                 fill=col if corner or name == 'grey' else tuple(c * 0.5 for c in col),
             )
-        doc.text(M + 30, y - 3, tr(f'block.{name}'), 8, True)
-        y = doc.para(M + 68, y - 3, tr(f'block.{name}_means'), 8, x2 - M - 88) + 3
+        doc.text(M + 30, y - 3, tr(f'block.{name}'), 9, True)
+        y = doc.para(M + 76, y - 3, tr(f'block.{name}_means'), 9, x2 - M - 96) + 5
 
     y = doc.section(x2, top, tr('run.trouble'))
-    y = doc.para(x2, y, tr('run.trouble_restart'), 8.5, doc.w - M - x2)
-    y = doc.para(x2, y + 4, tr('run.trouble_backup'), 8.5, doc.w - M - x2)
-    y = doc.section(x2, y + 12, tr('run.columns'))
+    y = doc.para(x2, y, tr('run.trouble_restart'), 9.5, doc.w - M - x2)
+    y = doc.para(x2, y + 6, tr('run.trouble_backup'), 9.5, doc.w - M - x2)
+    y = doc.section(x2, y + 18, tr('run.columns'))
     doc.para(
         x2,
         y,
         tr('run.columns_note'),
-        8,
+        9,
         doc.w - M - x2,
         color=MUTED,
     )
@@ -575,20 +578,20 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
         else:
             cols += [(X_OBJ, tr('col.objects'))]
         for x, t in cols:
-            doc.text(x, y, doc.fit(t.upper(), 6.5, 100, True), 6.5, True, MUTED)
+            doc.text(x, y, doc.fit(t.upper(), 7.5, 110, True), 7.5, True, MUTED)
         return y + 6
 
     def notes(i):
         """The scene's description, wrapped to the scene column."""
         text = scenes[i].get('description')
-        return doc.wrap(' '.join(str(text).split()), 7, X_IN - X_NAME - 10) if text else []
+        return doc.wrap(' '.join(str(text).split()), 8, X_IN - X_NAME - 10) if text else []
 
     def notes_top(i):
         """Where the description starts, under the name."""
         return 27
 
     def row_height(i):
-        h = max(PIC_W * aspect + 10, notes_top(i) + len(notes(i)) * 8.5)
+        h = max(PIC_W * aspect + 10, notes_top(i) + len(notes(i)) * 9.5)
         if len(views[i]) > 1:
             per_line = int((X_END - X_NAME) // 76)
             lines = math.ceil(len(views[i]) / per_line)
@@ -620,7 +623,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
             doc.text(X_NUM + 7, y + 17, str(i + 1), 12, True)
             picture(i, 0, X_PIC, y + 5, PIC_W)
             doc.text(
-                X_NAME, y + 15, doc.fit(st.get('name', '?'), 9, X_IN - X_NAME - 8, True), 9, True
+                X_NAME, y + 15, doc.fit(st.get('name', '?'), 10, X_IN - X_NAME - 8, True), 10, True
             )
             # in
             _, lc = ENTRY[f['entry']]
@@ -631,31 +634,31 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
             if desk[i]:  # the desk can take this step too
                 doc.label(X_IN + w + 3, y + 7, 'DMX', DESK)
             if i:
-                doc.text(X_IN, y + 28, tr('run.fade', t=secs(f['fade'])), 7, color=MUTED)
+                doc.text(X_IN, y + 29, tr('run.fade', t=secs(f['fade'])), 8, color=MUTED)
             # objects
             now = object_contents(st, cfg)
             before = object_contents(scenes[i - 1], cfg) if i else {}
             if st.get('blackout'):
-                doc.text(X_OBJ, y + 15, tr('run.all_black'), 8, color=MUTED)
+                doc.text(X_OBJ, y + 15, tr('run.all_black'), 9, color=MUTED)
             elif split:
                 for k, o in enumerate(objects):
                     kind, t = now[o['id']]
                     slides = kind == 'slideshow'
                     same = before.get(o['id']) == (kind, t) and not slides
                     x = X_OBJ + k * obj_w
-                    lines = doc.wrap(t.replace('-', ' '), 7.5, obj_w - 6, slides)
+                    lines = doc.wrap(t.replace('-', ' '), 8.5, obj_w - 6, slides)
                     for li, line in enumerate(lines[:3]):
                         doc.text(
                             x,
-                            y + 15 + li * 9.5,
+                            y + 15 + li * 10.5,
                             line,
-                            7.5,
+                            8.5,
                             slides,
                             MUTED if same or kind == 'fill' else INK,
                         )
                     if same:
                         doc.text(
-                            x, y + 15 + min(len(lines), 3) * 9.5, tr('run.stays'), 6.5, color=MUTED
+                            x, y + 15 + min(len(lines), 3) * 10.5, tr('run.stays'), 7.5, color=MUTED
                         )
             else:
                 for k, o in enumerate(objects):
@@ -663,14 +666,14 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
                     doc.text(
                         X_OBJ,
                         y + 15 + k * 10,
-                        doc.fit(f'{o["id"]}: {t}', 7.5, X_END - X_OBJ - 6),
+                        doc.fit(f'{o["id"]}: {t}', 8.5, X_END - X_OBJ - 6),
                         7.5,
                         color=MUTED if before.get(o['id']) == (kind, t) else INK,
                     )
             # the scene's description under its name, then the slideshow combinations
             for k, line in enumerate(notes(i)):
-                doc.text(X_NAME, y + notes_top(i) + k * 8.5, line, 7, color=MUTED)
-            sy = y + max(PIC_W * aspect + 12, notes_top(i) + len(notes(i)) * 8.5 + 2)
+                doc.text(X_NAME, y + notes_top(i) + k * 9.5, line, 8, color=MUTED)
+            sy = y + max(PIC_W * aspect + 12, notes_top(i) + len(notes(i)) * 9.5 + 2)
             if len(views[i]) > 1:
                 per_line = int((X_END - X_NAME) // 76)
                 for k, v in enumerate(views[i]):
@@ -678,9 +681,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
                     ty = sy + (k // per_line) * (62 * aspect + 18)
                     th = picture(i, k, x, ty, 68)
                     changed = ', '.join(v['changed']) if v.get('changed') else ''
-                    doc.text(
-                        x, ty + th + 8, doc.fit(f'{k + 1}. {changed}', 6.2, 72, True), 6.2, True
-                    )
+                    doc.text(x, ty + th + 9, doc.fit(f'{k + 1}. {changed}', 7, 72, True), 7, True)
             y += h
         doc.line(M, y, doc.w - M, y)
     doc.save()
