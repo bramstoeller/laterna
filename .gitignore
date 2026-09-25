@@ -8,9 +8,9 @@ venv/
 **/_archive/morph/venv/
 __pycache__/
 *.pyc
-cache/
-renders/
-export/
+_cache/
+_renders/
+_output/
 **/_archive/morph/landmarks/
 **/_archive/morph/face_landmarker.task
 # a show's media stay out; the empty folders are kept with a .gitkeep

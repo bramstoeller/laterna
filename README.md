@@ -49,7 +49,9 @@ venv/bin/laterna ~/shows    # or below another folder
 ```
 
 The chosen show's folder becomes the working directory, so each show has
-its own `cache/`, `renders/` and `export/`.
+its own `_cache/`, `_renders/` and `_output/`. What the apps make goes in
+folders starting with an underscore: those can always go, the rest of a
+show folder is yours.
 
 ## The apps
 

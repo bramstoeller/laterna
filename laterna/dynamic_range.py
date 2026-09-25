@@ -168,8 +168,8 @@ def self_test(cfg):
     assert lut[128, 0] > 128
     image = gamma_chart(*cfg['canvas'], (255, 255, 255))
     render.apply_gamma(image, lut)
-    render.save_png(image, 'renders/dynamic-range.png')
-    print('self-test ok (written: renders/dynamic-range.png)')
+    render.save_png(image, '_renders/dynamic-range.png')
+    print('self-test ok (written: _renders/dynamic-range.png)')
 
 
 def run(screen=None, config='config.yaml'):

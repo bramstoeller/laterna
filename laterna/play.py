@@ -144,7 +144,7 @@ def bar_unit(span, max_blocks):
 
 
 # rendered stages on disk, so a restart skips rendering
-CACHE_DIR = pathlib.Path('cache')
+CACHE_DIR = pathlib.Path('_cache')
 MANIFEST = CACHE_DIR / 'manifest.yaml'
 
 # background render of the previous run in this process, if it is still
@@ -156,7 +156,7 @@ _worker = None
 
 def _stop_worker():
     """Cancel and join a render thread left by an earlier run, so two runs
-    never write cache/ at the same time."""
+    never write _cache/ at the same time."""
     global _worker
     if _worker is not None:
         thread, stop = _worker
@@ -724,9 +724,9 @@ def run(
         for _ in range(20):
             lights.light(out, frame_for(idx), molding_for(idx), demo)
         ms = (pygame.time.get_ticks() - t0) / 20.0
-        pathlib.Path('renders').mkdir(exist_ok=True)
-        pygame.image.save(out, 'renders/lamps.png')
-        print(f'lamps: {ms:.1f} ms per frame; {desk.status()} (written: renders/lamps.png)')
+        pathlib.Path('_renders').mkdir(exist_ok=True)
+        pygame.image.save(out, '_renders/lamps.png')
+        print(f'lamps: {ms:.1f} ms per frame; {desk.status()} (written: _renders/lamps.png)')
         desk.close()
         if standalone:
             pygame.quit()

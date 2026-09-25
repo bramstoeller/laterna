@@ -100,10 +100,10 @@ def keystone_image(cfg, corner):
 def self_test(cfg):
     """Headless check of the render and edit functions; does not save."""
     snap = calibration.snapshot(cfg)
-    render.save_png(alignment_image(cfg), 'renders/align_global.png')
+    render.save_png(alignment_image(cfg), '_renders/align_global.png')
     calibration.move_keystone(cfg, 0, 30, 20)
     calibration.move_keystone(cfg, 2, -15, 0)
-    render.save_png(keystone_image(cfg, 0), 'renders/align_keystone.png')
+    render.save_png(keystone_image(cfg, 0), '_renders/align_keystone.png')
     calibration.move(cfg, None, 50, -25)
     calibration.scale_by(cfg, None, 0.01)
     calibration.rotate_by(cfg, None, 0.5)
@@ -112,7 +112,7 @@ def self_test(cfg):
     assert cfg['scale_mm_per_px'] == snap[None][1]
     assert cfg['rotation'] == snap[None][2]
     assert calibration.keystone_offsets(cfg) == snap['keystone']
-    print('self-test ok (written: renders/align_global.png, renders/align_keystone.png)')
+    print('self-test ok (written: _renders/align_global.png, _renders/align_keystone.png)')
 
 
 def run(screen=None, config='config.yaml'):

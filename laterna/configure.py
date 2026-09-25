@@ -151,7 +151,7 @@ def self_test(cfg):
     """Headless check of the render and edit functions; does not save."""
     snap = calibration.snapshot(cfg)
     corner_snap = calibration.corner_snapshot(cfg)
-    render.save_png(calibration_image(cfg, selected=2), 'renders/configure.png')
+    render.save_png(calibration_image(cfg, selected=2), '_renders/configure.png')
     calibration.move(cfg, 2, 50, -25)
     calibration.scale_by(cfg, 2, 1.0)
     calibration.rotate_by(cfg, 2, 0.5)
@@ -165,10 +165,12 @@ def self_test(cfg):
     after = render.object_corners_world(cfg, obj)
     assert np.allclose(after[1] - before[1], (10.0, 0.0), atol=0.1), after[1] - before[1]
     assert np.allclose(after[0], before[0])
-    render.save_png(calibration_image(cfg, selected=2, corner=1), 'renders/configure-wireframe.png')
+    render.save_png(
+        calibration_image(cfg, selected=2, corner=1), '_renders/configure-wireframe.png'
+    )
     calibration.reset_corners(cfg, 2, corner_snap)
     assert obj['frame']['inner'] == corner_snap[2]
-    print('self-test ok (written: renders/configure.png, renders/configure-wireframe.png)')
+    print('self-test ok (written: _renders/configure.png, _renders/configure-wireframe.png)')
 
 
 def run(screen=None, config='config.yaml'):

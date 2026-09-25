@@ -4,8 +4,9 @@ A show is a folder with a config.yaml (and its scenes.yaml, images/,
 videos/); every config.yaml below the working directory (or the folder
 given on the command line; frozen: the executable's folder) is offered,
 e.g. shows/example/config.yaml. The chosen show's
-folder becomes the working directory, so each show keeps its own cache/,
-renders/ and export/.
+folder becomes the working directory, so each show keeps its own _cache/,
+_renders/ and _output/: what the apps make goes in folders starting with
+an underscore, so everything else in a show is yours and those can go.
 
 The apps, in show order:
 
@@ -14,7 +15,7 @@ The apps, in show order:
   3  global alignment  (scale, rotation, position -> config.yaml)
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
-  6  export            (config, run sheet and backup as PDF -> export/)
+  6  export            (config, run sheet and backup as PDF -> _output/)
   7  present           (play the stages from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse
@@ -33,23 +34,10 @@ import yaml
 
 from . import align_global, configure, dynamic_range, export, look, play, render, test_pattern, ui
 
-# folders never searched for shows
-SKIP_DIRS = {
-    'venv',
-    '.venv',
-    '.git',
-    '_internal',
-    '__pycache__',
-    'cache',
-    'renders',
-    'export',
-    'images',
-    'videos',
-    '_archive',
-    'build',
-    'dist',
-    'node_modules',
-}
+# folders never searched for shows, besides the ones starting with . or _
+# (hidden, and what the apps make: _cache, _renders, _output; the frozen
+# app's _internal)
+SKIP_DIRS = {'venv', '__pycache__', 'images', 'videos', 'build', 'dist', 'node_modules'}
 APPS = [
     ('Test pattern', test_pattern),
     ('Dynamic range', dynamic_range),
@@ -71,7 +59,7 @@ def find_shows(root):
     """The folders below `root` holding a config.yaml, sorted by path."""
     shows = []
     for folder, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith('.'))
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith(('.', '_')))
         if 'config.yaml' in files and pathlib.Path(folder) != root:
             shows.append(pathlib.Path(folder))
     return shows

@@ -205,9 +205,9 @@ def self_test(cfg, scenes_path):
     def lit(image):
         return np.clip(image.astype(np.float32) * gain, 0, 255).astype(np.uint8)
 
-    render.save_png(lit(renderer.render(stages[min(3, len(stages) - 1)])), 'renders/look.png')
-    render.save_png(lit(renderer.render(stages[0])), 'renders/look-white.png')
-    print('self-test ok (written: renders/look.png, renders/look-white.png)')
+    render.save_png(lit(renderer.render(stages[min(3, len(stages) - 1)])), '_renders/look.png')
+    render.save_png(lit(renderer.render(stages[0])), '_renders/look-white.png')
+    print('self-test ok (written: _renders/look.png, _renders/look-white.png)')
 
 
 def run(
