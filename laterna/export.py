@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Export: three PDFs of the loaded config.yaml and scenes.yaml, written to
-_output/ next to config.yaml (laterna/documents.py lays them out):
+_export/ next to config.yaml (laterna/documents.py lays them out):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
@@ -41,7 +41,7 @@ import pygame
 from . import dmx, documents, render, ui, video
 from .look import WHITE_VIEW
 
-EXPORT_DIR = '_output'
+EXPORT_DIR = '_export'
 MAX_COMBINATIONS = 64  # slideshow pictures per scene in the export
 THUMB_WIDTH = 480  # px of the cue list pictures
 

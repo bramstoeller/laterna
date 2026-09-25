@@ -5,7 +5,7 @@ videos/); every config.yaml below the working directory (or the folder
 given on the command line; frozen: the executable's folder) is offered,
 e.g. shows/example/config.yaml. The chosen show's
 folder becomes the working directory, so each show keeps its own _cache/,
-_renders/ and _output/: what the apps make goes in folders starting with
+_renders/ and _export/: what the apps make goes in folders starting with
 an underscore, so everything else in a show is yours and those can go.
 
 The apps, in show order:
@@ -15,7 +15,7 @@ The apps, in show order:
   3  global alignment  (scale, rotation, position -> config.yaml)
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
-  6  export            (config, run sheet and backup as PDF -> _output/)
+  6  export            (config, run sheet and backup as PDF -> _export/)
   7  present           (play the scenes from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse
@@ -35,7 +35,7 @@ import yaml
 from . import align_global, configure, dynamic_range, export, look, play, render, test_pattern, ui
 
 # folders never searched for shows, besides the ones starting with . or _
-# (hidden, and what the apps make: _cache, _renders, _output; the frozen
+# (hidden, and what the apps make: _cache, _renders, _export; the frozen
 # app's _internal)
 SKIP_DIRS = {'venv', '__pycache__', 'images', 'videos', 'build', 'dist', 'node_modules'}
 APPS = [
