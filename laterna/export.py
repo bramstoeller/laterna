@@ -113,17 +113,11 @@ def _stem(path):
     return str(path).replace('\\', '/').split('/')[-1].rsplit('.', 1)[0]
 
 
-def scene_views(cfg, renderer, scene, gain, projector=None):
-    """The pictures of a scene as the audience sees them at full light:
-    [{'full': JPEG bytes of the whole canvas, warped to the projector by
-    `projector` (a config with its keystone; None = as rendered), or None
-    (blackout), 'thumb':
-    RGB crop for the cue list or None, 't': seconds after entering,
-    'changed': [picture names new in this view]}], one per distinct
-    combination of slideshow pictures, videos at their first frame."""
-    box = crop_box(cfg)
-    if scene.get('blackout'):
-        return [{'full': None, 'thumb': None, 't': 0.0, 'changed': []}]
+def _pictures(cfg, renderer, scene, first_only=False):
+    """[(t, picture names, RGB image)] of a scene as rendered (unlit), one
+    per distinct combination of slideshow pictures (only the first with
+    `first_only`), videos and video slides at their first frame; t =
+    seconds after entering, the names those of the slideshow pictures."""
     lut = render.gamma_lut(cfg)
     base = renderer.render(scene)
     alpha = renderer.video_alpha(scene)
@@ -141,10 +135,10 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
                 clip.cap.release()
             if frame is not None:
                 fixed.append((spec, video._compose_rows(video._fit_region(frame, spec), spec, lut)))
-    views, before = [], None
+    out = []
     for t, combo in slide_combinations([spec['timing'] for spec, _ in shows]):
-        out = base.copy()
-        flat = out.reshape(-1, 3)
+        image = base.copy()
+        flat = image.reshape(-1, 3)
         for spec, rows in fixed:
             flat[spec['flat']] = rows
         names = []
@@ -152,6 +146,29 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
             rows, _ = video._slide_rows(spec, k, 0.0, lut)  # a video slide: its first frame
             flat[spec['flat']] = rows
             names.append(_stem(m['slideshow'][k]))
+        out.append((t, names, image))
+        if first_only:
+            break
+    for spec, _ in shows:
+        for slide in spec['slides']:
+            if isinstance(slide, dict) and slide['clip'].ok:
+                slide['clip'].cap.release()
+    return out
+
+
+def scene_views(cfg, renderer, scene, gain, projector=None):
+    """The pictures of a scene as the audience sees them at full light:
+    [{'full': JPEG bytes of the whole canvas, warped to the projector by
+    `projector` (a config with its keystone; None = as rendered), or None
+    (blackout), 'thumb':
+    RGB crop for the cue list or None, 't': seconds after entering,
+    'changed': [picture names new in this view]}], one per distinct
+    combination of slideshow pictures, videos at their first frame."""
+    box = crop_box(cfg)
+    if scene.get('blackout'):
+        return [{'full': None, 'thumb': None, 't': 0.0, 'changed': []}]
+    views, before = [], None
+    for t, names, out in _pictures(cfg, renderer, scene):
         changed = [n for j, n in enumerate(names) if before is None or before[j] != n]
         before = names
         image = lit(out, gain)
@@ -164,10 +181,6 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
             th = max(1, round(thumb.shape[0] * THUMB_WIDTH / thumb.shape[1]))
             thumb = cv2.resize(thumb, (THUMB_WIDTH, th), interpolation=cv2.INTER_AREA)
         views.append({'full': buf.tobytes(), 'thumb': thumb, 't': t, 'changed': changed})
-    for spec, _ in shows:
-        for slide in spec['slides']:
-            if isinstance(slide, dict) and slide['clip'].ok:
-                slide['clip'].cap.release()
     return views
 
 
@@ -204,23 +217,33 @@ def _widest(cfg):
     return max(cfg['objects'], key=lambda o: np.ptp(render.object_wood_world(cfg, o)[:, 0]))
 
 
-def config_renders(cfg, renderer, scenes, gain):
-    """The pictures of the config pages (documents.config_sheet)."""
+def _lightest(scenes, views):
+    """The scene with pictures (images, slideshows or videos) that is the
+    lightest in the cue list: where the light shows best; None without."""
+    lit_ones = [
+        (float(views[i][0]['thumb'].mean()), i)
+        for i, s in enumerate(scenes)
+        if views[i][0]['thumb'] is not None
+        and any(k in m for m in s.get('mappings', []) for k in ('image', 'slideshow', 'video'))
+    ]
+    return scenes[max(lit_ones)[1]] if lit_ones else None
+
+
+def config_renders(cfg, renderer, scenes, views, gain):
+    """The pictures of the config pages (documents.config_sheet); the spot
+    is shown on the lightest scene (_lightest)."""
     box = crop_box(cfg)
     look = cfg['look']
-    example = next(
-        (
-            s
-            for s in scenes
-            if not s.get('blackout') and any('image' in m for m in s.get('mappings', []))
-        ),
-        None,
-    )
+    example = _lightest(scenes, views)
+
+    def picture():
+        return lit(_pictures(cfg, renderer, example, first_only=True)[0][2], gain)
+
     extras = {
         'look': copy.deepcopy(look),
         'crop': box,
         'white_spot': lit(renderer.render(WHITE_VIEW), gain),
-        'scene_spot': lit(renderer.render(example), gain) if example else None,
+        'scene_spot': picture() if example else None,
         'scene_name': example.get('name', '?') if example else None,
     }
     # the same without the spots: strength 0, then back
@@ -230,7 +253,7 @@ def config_renders(cfg, renderer, scenes, gain):
         cfg['look']['molding_spot']['strength'] = 0.0
     renderer.apply_look()
     extras['white_flat'] = lit(renderer.render(WHITE_VIEW), gain)
-    extras['scene_flat'] = lit(renderer.render(example), gain) if example else None
+    extras['scene_flat'] = picture() if example else None
     cfg['look'] = saved
     renderer.apply_look()
     # the molding alone, top of the widest frame
@@ -301,7 +324,7 @@ def export_all(
         progress(f'scene {i + 1}/{len(scenes)}: {scene.get("name", "?")}')
         views.append(scene_views(cfg, renderer, scene, gain, projector))
     progress('pictures for the config pages...')
-    extras = config_renders(cfg, renderer, scenes, gain)
+    extras = config_renders(cfg, renderer, scenes, views, gain)
 
     paths = [out / 'backup.pdf', out / 'run-sheet.pdf', out / 'config.pdf']
     progress(f'writing {paths[0].name}...')
