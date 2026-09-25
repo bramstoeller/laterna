@@ -1304,8 +1304,8 @@ def _mapping_lines(m):
 
 def scenes_sheet(path, cfg, scenes, fades, data, source):
     """The scenes as scenes.yaml sets them, in a table: per scene its
-    timing (the effective hold and the fade to the next), blackout, colours
-    and what each object shows; the file's defaults on top. A column that is
+    timing (the effective hold and the fade to the next), colours and what
+    each object shows (blackout for a blackout); the file's defaults on top. A column that is
     empty for every scene is left out. No descriptions: the values only."""
     i18n.use(cfg.get('language'))
     show = show_name(cfg)
@@ -1315,6 +1315,8 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
 
     def media(s, ids):
         """The lines of what scene s shows on the objects `ids` (one column)."""
+        if s.get('blackout'):
+            return ['blackout']
         lines = []
         for m in s.get('mappings', []):
             if not set(m['objects']) & set(ids):
@@ -1334,7 +1336,6 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
         ('name', 130, True, [[str(s.get('name', ''))] for s in scenes]),
         ('hold', 30, False, [[] if s.get('hold') is None else [num(s['hold'], 2)] for s in scenes]),
         ('fade', 30, False, [[num(f, 2)] for f in fades] + [[]]),
-        ('blackout', 42, False, [['true'] if s.get('blackout') else [] for s in scenes]),
         ('molding_color', 70, False, [color(s, 'molding_color') for s in scenes]),
         ('fill_color', 70, False, [color(s, 'fill_color') for s in scenes]),
     ]
