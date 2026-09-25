@@ -18,8 +18,10 @@ The apps, in show order:
   7  present           (play the stages from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse
-the menu's fullscreen display, so there is no mode switch (no flicker);
-Q / ESC in an app returns to the apps, there to the shows, there quits.
+the menu's fullscreen display, so there is no mode switch (no flicker):
+only opening a show whose canvas differs from the display sets a new mode
+once, and the menus then draw on the show's canvas too. Q / ESC in an app
+returns to the apps, there to the shows, there quits.
 """
 
 import os
@@ -87,21 +89,35 @@ def show_description(folder):
 def menu(screen, title, subtitle, items, on_pick, quit_hint='Q goes back'):
     """Buttons named `items`; on_pick(index) runs the
     choice and returns a message for the footer ('' for none), or None to
-    leave the menu. Returns when Q / ESC is pressed or on_pick says so."""
-    width, height = screen.get_size()
+    leave the menu. Returns when Q / ESC is pressed or on_pick says so.
+
+    The layout follows the display as it is (a show may have set its own
+    canvas size meanwhile), so the menus never switch the display's mode
+    themselves: in fullscreen that closes and reopens the window."""
     items = items[:MAX_ITEMS]
-    button_width = min(1100, width - 80)
-    x = (width - button_width) // 2
-    # the buttons share the height between the title and the footer
-    pitch = min(90, (height - 240 - 170) // max(len(items), 1))
     title_font = pygame.font.SysFont('monospace', 56, bold=True)
-    font = pygame.font.SysFont('monospace', min(40, pitch // 2))
     small = pygame.font.SysFont('monospace', 26)
-    buttons = [pygame.Rect(x, 240 + i * pitch, button_width, pitch - 17) for i in range(len(items))]
+    fonts = {}  # button font size -> font
     message = ''
 
+    def layout():
+        """(width, height, button font, button rects) for the display now."""
+        width, height = pygame.display.get_surface().get_size()
+        button_width = min(1100, width - 80)
+        x = (width - button_width) // 2
+        # the buttons share the height between the title and the footer
+        pitch = min(90, (height - 240 - 170) // max(len(items), 1))
+        size = min(40, pitch // 2)
+        if size not in fonts:
+            fonts[size] = pygame.font.SysFont('monospace', size)
+        buttons = [
+            pygame.Rect(x, 240 + i * pitch, button_width, pitch - 17) for i in range(len(items))
+        ]
+        return width, height, fonts[size], buttons
+
     def draw():
-        screen = pygame.display.get_surface()  # an app may have set a new mode
+        screen = pygame.display.get_surface()
+        width, height, font, buttons = layout()
         screen.fill(BACKGROUND)
         text = title_font.render(title, True, TEXT)
         screen.blit(text, ((width - text.get_width()) // 2, 110))
@@ -152,7 +168,7 @@ def menu(screen, title, subtitle, items, on_pick, quit_hint='Q goes back'):
                 if event.key in number_keys and not pick(number_keys[event.key]):
                     return
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                for i, rect in enumerate(buttons):
+                for i, rect in enumerate(layout()[3]):
                     if rect.collidepoint(event.pos):
                         if not pick(i):
                             return
@@ -193,10 +209,11 @@ def root_folder():
 def main():
     root = root_folder()
     shows = find_shows(root)
-    # the picker is drawn at ui.menu_size(), a show at its canvas size; both
-    # scaled to fill the screen (ui.set_canvas)
+    # the picker starts at ui.menu_size(), a show gets its canvas size, both
+    # scaled to fill the screen (ui.set_canvas); back in the picker the
+    # show's canvas stays: a new mode in fullscreen closes and reopens the
+    # window, so the display only changes for a show with another canvas
     screen = ui.init_screen(None, ui.APP_NAME, mouse_visible=True)
-    picker_size = screen.get_size()
 
     def open_show(index):
         nonlocal screen
@@ -213,8 +230,6 @@ def main():
             app_menu(screen, folder)
         finally:
             os.chdir(root)
-        if screen.get_size() != picker_size:
-            screen = ui.set_canvas(picker_size)
         pygame.display.set_caption(ui.APP_NAME)
         return ''
 
