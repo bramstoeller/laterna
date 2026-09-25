@@ -109,8 +109,8 @@ TEXTS = {
         'nl': 'wacht op DMX (master = 0)',
     },
     'block.grey_means': {
-        'en': 'top left, one row per timing (shows in step share one): counts down hold + fade to the next picture / the restart',
-        'nl': 'linksboven, één rij per timing (gelijklopende shows delen er één): telt hold + fade af tot het volgende beeld / de herstart',
+        'en': 'top left: the progress of a slideshow or video',
+        'nl': 'linksboven: de voortgang van een slideshow of video',
     },
     'run.trouble': {
         'en': 'If something goes wrong',
