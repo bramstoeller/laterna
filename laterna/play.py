@@ -15,9 +15,9 @@ Keys:
      they follow the desk, and can be dragged (laterna/faders.py); Tab or
      Esc closes them again. Beside them the debug lines: the scene and its
      timing, the master triggers (waiting for 0 / above 0, armed or not,
-     the last one that fired, also as an icon: triangle down / up,
-     orange not armed, green armed, grey none, blinking white after it
-     fired), the desk, the clips; the state bars are 10 px high meanwhile
+     the last one that fired, also as an icon: a ring (= 0) or a
+     triangle up (> 0), orange not armed, green armed, grey none, and a
+     white arrow down / up for 2 s after it fired), the desk, the clips; the state bars are 10 px high meanwhile
   Q / ESC  quit (back to the menu when started from main.py)
 
 A small bar in the top right corner tells the operator what the show is
@@ -118,12 +118,14 @@ STATE_PX = 2  # block size
 STATE_PITCH = 4  # block + gap
 STATE_DEBUG_H = 10  # block height with the faders open (Tab: debug)
 # the master trigger's icon beside the debug lines (Tab)
-TRIGGER_ICON = 16  # px
+TRIGGER_ICON = 18  # px
+DEBUG_FONT = 20  # the debug lines' font size and line pitch, px
+DEBUG_PITCH = 24
 TRIGGER_WAIT = (255, 128, 0)  # waiting, not armed yet
 TRIGGER_ARMED = (0, 220, 0)  # waiting and armed: the master moving fires it
 TRIGGER_NONE = (90, 90, 90)  # no master trigger on this scene
-TRIGGER_FIRED = (255, 255, 255)  # blinks after one fired
-TRIGGER_BLINK = 2.0  # seconds
+TRIGGER_FIRED = (255, 255, 255)  # the arrow after one fired
+TRIGGER_FIRED_S = 2.0  # how long that arrow shows, seconds
 # (the block in the corner, the countdown behind it) at full; they are
 # drawn at STATE_LEVELS of that (P steps on), half at the start: dark
 # enough to read from the desk without the audience noticing
@@ -378,6 +380,7 @@ def run(
     clock = pygame.time.Clock()
     lights = lamps.Lamps(cfg)
     panel = faders.Faders(desk, pygame.font.SysFont('monospace', 16))
+    debug_font = pygame.font.SysFont('monospace', DEBUG_FONT)
 
     screen.fill((0, 0, 0))
     ui.draw_help(screen, font, ['preparing scenes...'])
@@ -521,87 +524,72 @@ def run(
         return out
 
     def trigger_state():
-        """The master trigger on this scene (see check_master): (what the
-        debug line says, 'down' / 'up' for the one waiting or None, armed)."""
+        """The master trigger on this scene (see check_master): (the debug
+        line, 'down' / 'up' for the one waiting or None, armed)."""
         here = _is_blackout(scenes[idx])
         after = idx + 1 < total and _is_blackout(scenes[idx + 1])
         if transition_until is not None:
-            return '- (fading)', None, False
+            return 'no trigger (fading)', None, False
         if not desk.receiving:
-            return 'off (no desk signal)', None, False
+            return 'no trigger (no signal)', None, False
         if idx + 1 >= total:
-            return 'none (last scene)', None, False
+            return 'no trigger (last scene)', None, False
         if hold_until is not None:
-            return 'off (the scene has a hold)', None, False
+            return 'no trigger (hold)', None, False
         if not here and after:
             armed = 'up' in master_seen
-            text = 'armed' if armed else 'not armed (master > 0 first)'
-            return f'waiting for master = 0 -> scene {idx + 2}, {text}', 'down', armed
+            return f'master = 0 → {idx + 2}  {"armed" if armed else "not armed"}', 'down', armed
         if here:
             armed = 'down' in master_seen
-            text = 'armed' if armed else 'not armed (master = 0 first)'
-            return f'waiting for master > 0 -> scene {idx + 2}, {text}', 'up', armed
-        return 'none (next scene is no blackout)', None, False
-
-    def trigger_lines():
-        """The master trigger, the master and the last trigger that fired."""
-        master = desk.master() * 255.0
-        lines = [
-            f'master trigger: {trigger_state()[0]}',
-            f'master {master:.1f} ({"= 0" if master_dark else "> 0"})',
-        ]
-        if last_trigger is not None:
-            kind, old, new, when = last_trigger
-            lines.append(
-                f'last trigger: master {kind}, scene {old + 1} -> {new + 1}, '
-                f'{now() - when:.1f} s ago'
-            )
-        return lines
+            return f'master > 0 → {idx + 2}  {"armed" if armed else "not armed"}', 'up', armed
+        return 'no trigger (next no blackout)', None, False
 
     def draw_trigger(x, y):
-        """The master trigger as an icon: a triangle down (waiting for 0) or
-        up (waiting for > 0), orange while not armed, green when armed, a
-        grey square when there is none; white blinking for a while after
-        one fired."""
-        _, direction, armed = trigger_state()
+        """The master trigger as an icon: a ring, a zero (waiting for 0), or
+        a triangle up (waiting for > 0), orange while not armed, green when
+        armed, a grey square when there is none; for a while after one
+        fired a white arrow its way (down: to 0, up: above 0)."""
         s = TRIGGER_ICON
-        if last_trigger is not None and now() - last_trigger[3] < TRIGGER_BLINK:
-            if int((now() - last_trigger[3]) * 8) % 2 == 0:  # 4 Hz
-                pygame.draw.rect(screen, TRIGGER_FIRED, (x, y, s, s))
+        mid = x + s // 2
+        if last_trigger is not None and now() - last_trigger[3] < TRIGGER_FIRED_S:
+            down = last_trigger[0] == '= 0'
+            tip, base = (y + s, y + s // 2) if down else (y, y + s // 2)
+            tail = y if down else y + s
+            pygame.draw.line(screen, TRIGGER_FIRED, (mid, tail), (mid, base), 4)
+            pygame.draw.polygon(screen, TRIGGER_FIRED, [(x, base), (x + s, base), (mid, tip)])
             return
+        _, direction, armed = trigger_state()
+        color = TRIGGER_ARMED if armed else TRIGGER_WAIT
         if direction is None:
             pygame.draw.rect(screen, TRIGGER_NONE, (x + 3, y + 3, s - 6, s - 6))
-            return
-        color = TRIGGER_ARMED if armed else TRIGGER_WAIT
-        if direction == 'down':
-            points = [(x, y), (x + s, y), (x + s / 2, y + s)]
+        elif direction == 'down':
+            pygame.draw.circle(screen, color, (mid, y + s // 2), s // 2, 3)
         else:
-            points = [(x, y + s), (x + s, y + s), (x + s / 2, y)]
-        pygame.draw.polygon(screen, color, points)
+            pygame.draw.polygon(screen, color, [(x, y + s), (x + s, y + s), (mid, y)])
 
     def debug_lines():
-        """Everything useful while the faders are open (Tab)."""
+        """Everything useful while the faders are open (Tab), tersely."""
         scene = scenes[idx]
-        kind = 'blackout' if _is_blackout(scene) else 'scene'
         hold = scene.get('hold')
         fade_in = fades[idx - 1] if idx > 0 else 0.0
-        fade_out = fades[idx] if idx + 1 < total else None
+        fade_out = f'{fades[idx]:.1f} s' if idx + 1 < total else '-'
         lines = [
-            f'{kind} {idx + 1}/{total}: {scene.get("name", "?")}',
-            f'  hold {"-" if hold is None else f"{hold:.1f} s"}, fade in {fade_in:.1f} s, '
-            f'fade out {"-" if fade_out is None else f"{fade_out:.1f} s"}',
+            f'{idx + 1}/{total} {scene.get("name", "?")}'
+            + ('  (blackout)' if _is_blackout(scene) else ''),
+            f'in {fade_in:.1f} s  out {fade_out}  hold {"-" if hold is None else f"{hold:.1f} s"}',
         ]
         if transition_until is not None:
-            lines.append(
-                f'  fading to scene {transition_to + 1}: '
-                f'{max(transition_until - now(), 0.0):.1f} / {transition_span:.1f} s left'
-            )
+            left = max(transition_until - now(), 0.0)
+            lines.append(f'fade → {transition_to + 1}  {left:.1f} / {transition_span:.1f} s')
         elif hold_until is not None:
-            lines.append(f'  hold: {max(hold_until - now(), 0.0):.1f} / {hold:.1f} s left')
+            lines.append(f'hold → {idx + 2}  {max(hold_until - now(), 0.0):.1f} / {hold:.1f} s')
         else:
-            lines.append('  waiting for a key')
-        lines += trigger_lines()
-        lines += desk.status_lines()
+            lines.append('wait key')
+        lines += [trigger_state()[0], f'master {desk.master() * 255.0:.1f}']
+        if last_trigger is not None:
+            kind, old, new, when = last_trigger
+            lines.append(f'fired {kind}  {old + 1} → {new + 1}  {now() - when:.1f} s ago')
+        lines.append(desk.status_lines()[0])
         player = players.get(idx)
         seen = set()
         for spec in player.specs if player else ():
@@ -611,24 +599,16 @@ def run(
             clip = player.clips[spec['path']]
             if isinstance(clip, video.SlideshowClip):
                 pos = clip.pos[0] + 1 if isinstance(clip.pos, tuple) else '?'
-                what = (
-                    f'slideshow {clip.count} x {clip.hold:.1f} + {clip.transition_time:.1f} s, '
-                    f'picture {pos}'
-                )
+                what = f'slides {pos}/{clip.count} ({clip.hold:.1f} + {clip.transition_time:.1f} s)'
             else:
-                what = (
-                    f'{pathlib.Path(clip.path).name}: {clip.count} frames @ {clip.fps:.2f} fps, '
-                    f'frame {clip.pos + 1}'
-                )
+                what = f'{pathlib.Path(clip.path).name} {clip.pos + 1}/{clip.count}'
+            state = clip.next_change(now() - clip.t0) if clip.t0 is not None else None
             if clip.t0 is None:
-                lines.append(f'  {what}, not started')
-                continue
-            t = now() - clip.t0
-            state = clip.next_change(t)
-            if state is not None:
+                what += '  stopped'
+            elif state is not None:
                 fading, left, span = state
-                what += f', {"fading" if fading else "next"} in {left:.1f} / {span:.1f} s'
-            lines.append(f'  {what} (t {t:.1f} s)')
+                what += f'  {"fade" if fading else "next"} {left:.1f} / {span:.1f} s'
+            lines.append(what)
         return lines
 
     def overlay():
@@ -639,8 +619,8 @@ def run(
         if panel.visible:  # the debug lines beside the faders, in their font
             top = panel.draw(screen)
             lines_x = panel.width + TRIGGER_ICON + 12
-            ui.draw_help(screen, panel.font, debug_lines(), left=lines_x, pitch=20)
-            draw_trigger(panel.width, 20 + 3 * 20 + 2)  # beside 'master trigger:'
+            ui.draw_help(screen, debug_font, debug_lines(), left=lines_x, pitch=DEBUG_PITCH)
+            draw_trigger(panel.width, 20 + 3 * DEBUG_PITCH + 3)  # beside the trigger line
         elif info:
             lines.append(f'scene {idx + 1}/{total}: {scenes[idx].get("name", "?")}')
             lines += desk.status_lines()
