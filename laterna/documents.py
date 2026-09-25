@@ -1302,6 +1302,14 @@ def _mapping_lines(m):
     return lines
 
 
+SAME = ['']  # scenes.pdf: the same picture as the scene before (a line)
+
+
+def _indent(line):
+    """Points a line of _mapping_lines is indented by (a slideshow's pictures)."""
+    return 8 if line.startswith(' ') else 0
+
+
 def scenes_sheet(path, cfg, scenes, fades, data, source):
     """The scenes as scenes.yaml sets them, in a table: per scene its
     timing (the effective hold and the fade to the next), colours and what
@@ -1352,13 +1360,23 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
         ids = [o['id'] for o in objects]
         columns.append(('mappings', True, False, [media(s, ids) for s in scenes]))
     columns = [c for c in columns if any(c[3])]  # empty for every scene: left out
+    for c in columns:  # a picture the same as in the scene before: a line on down
+        if c[1]:
+            values = c[3]
+            for i in range(len(values) - 1, 0, -1):
+                if values[i] and values[i] == values[i - 1] and values[i] != ['blackout']:
+                    values[i] = SAME
     # each column as narrow as its widest value (or name); what is left of
     # the page stays empty on the right. Too wide for the page: the media
     # columns share what the others leave, and wrap
     widths = [
         max(
             [doc.width(c[0].upper(), 6.5, True)]
-            + [doc.width(line, size, c[2]) for lines in c[3] for line in lines]
+            + [
+                doc.width(line.strip(), size, c[2]) + _indent(line)
+                for lines in c[3]
+                for line in lines
+            ]
         )
         for c in columns
     ]
@@ -1390,7 +1408,15 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
     y = head(y + 10)
     for i in range(len(scenes)):
         row = [
-            (x, [part for line in c[3][i] for part in doc.wrap(line, size, w, c[2])], c[2])
+            (
+                x,
+                [
+                    (_indent(line), part)
+                    for line in c[3][i]
+                    for part in doc.wrap(line.strip(), size, w - _indent(line), c[2])
+                ],
+                c[2],
+            )
             for c, x, w in zip(columns, xs, widths)
         ]
         h = max(len(lines) for _, lines, _ in row) * lead + 4
@@ -1400,8 +1426,11 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
             y = head(44)
         if i % 2 == 0:
             doc.rect(M - 3, y - size - 2, xs[-1] + widths[-1] - M + 6, h, fill=PANEL)
-        for x, lines, bold in row:
-            for k, line in enumerate(lines):
-                doc.text(x, y + k * lead, line, size, bold)
+        for (x, lines, bold), c in zip(row, columns):
+            if c[3][i] is SAME:  # the line through the rows that keep it
+                doc.line(x + 3, y - size - 2, x + 3, y - size - 2 + h, MUTED, 0.8)
+                continue
+            for k, (dx, line) in enumerate(lines):
+                doc.text(x + dx, y + k * lead, line, size, bold)
         y += h
     doc.save()
