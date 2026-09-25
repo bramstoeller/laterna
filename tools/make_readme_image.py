@@ -1,4 +1,4 @@
-"""Renders the picture in the README: the example show's `pictures` stage
+"""Renders the picture in the README: the example show's `pictures` scene
 as the audience sees it at full light, cropped around the frames.
 
     python -m tools.make_readme_image
@@ -15,7 +15,7 @@ from laterna import export, render
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHOW = ROOT / 'shows' / 'example'
 OUT = ROOT / 'docs' / 'example.jpg'
-STAGE = 'pictures'
+SCENE = 'pictures'
 WIDTH = 1280  # px of the written picture
 
 
@@ -23,9 +23,9 @@ def main():
     cfg = render.load_config(SHOW / 'config.yaml')
     cfg.pop('keystone', None)
     cfg['look'] = render.look_settings(cfg)
-    stages, _ = render.parse_stages(render.load_scenes(SHOW / 'scenes.yaml'), cfg)
-    stage = next(s for s in stages if s.get('name') == STAGE)
-    image = export.lit(render.StageRenderer(cfg, ss=3).render(stage), export.full_light(cfg))
+    scenes, _ = render.parse_scenes(render.load_scenes(SHOW / 'scenes.yaml'), cfg)
+    scene = next(s for s in scenes if s.get('name') == SCENE)
+    image = export.lit(render.SceneRenderer(cfg, ss=3).render(scene), export.full_light(cfg))
     x0, y0, x1, y1 = export.crop_box(cfg)
     image = image[y0:y1, x0:x1]
     h, w = image.shape[:2]

@@ -1,14 +1,14 @@
 """The pretend lamps on the set: per object one on its canvas (image,
 video or fill colour) and one on its molding, dimmed per tick on the
-rendered stage, no re-rendering. The blackout fades (play.dim), the
-crossfades between stages (play.crossfade) and the light desk
+rendered scene, no re-rendering. The blackout fades (play.dim), the
+crossfades between scenes (play.crossfade) and the light desk
 (laterna/dmx.py) all come through here.
 
-Compositing: a stage's render is its canvases plus its molding, and the
-molding-only render (StageRenderer.render_molding) splits them: canvas =
+Compositing: a scene's render is its canvases plus its molding, and the
+molding-only render (SceneRenderer.render_molding) splits them: canvas =
 render - molding. Per object both parts are cut with its mask (its outer
 polygon, dilated 2 px so the anti-aliased rim comes along), multiplied by
-level x tint and summed onto black. A crossfade mixes the two stages (and
+level x tint and summed onto black. A crossfade mixes the two scenes (and
 their moldings) first, in the same pass. All of it within the objects'
 bounding boxes (about 0.7 Mpx of the 2.3 Mpx canvas), in row bands spread
 over a few threads (numpy and OpenCV let go of the GIL while they work).
@@ -221,10 +221,10 @@ class Lamps:
         self.out[rows, cols] = acc  # truncates: with the noise, a dithered rounding
 
     def light(self, dst, live, molding, levels, fade=None):
-        """Draw `live` (the stage as rendered, videos composited: an RGB
+        """Draw `live` (the scene as rendered, videos composited: an RGB
         uint8 image (h, w, 3)) onto the surface `dst` under the lamps at
-        `levels`; `molding` is the stage's molding-only render. `fade` =
-        (live, molding, t) of the stage being faded to, t running 0 -> 1:
+        `levels`; `molding` is the scene's molding-only render. `fade` =
+        (live, molding, t) of the scene being faded to, t running 0 -> 1:
         the two are mixed before the light."""
         if fade is None and self.plain and levels.is_full(self.white):
             dst.blit(_as_surface(live), (0, 0))

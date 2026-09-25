@@ -41,20 +41,20 @@ TEXTS = {
         'nl': '{show} · draaiboek · {source} · gemaakt {date}',
     },
     'run.summary': {
-        'en': '{n} stages · {keys} on a key, {auto} by themselves · numbered like the L label of the presentation (stage k/{n})',
-        'nl': '{n} stages · {keys} op een toets, {auto} vanzelf · genummerd zoals het L-label van de voorstelling (stage k/{n})',
+        'en': '{n} scenes · {keys} on a key, {auto} by themselves · numbered like the L label of the presentation (scene k/{n})',
+        'nl': '{n} scènes · {keys} op een toets, {auto} vanzelf · genummerd zoals het L-label van de voorstelling (scène k/{n})',
     },
     'run.keys': {
         'en': 'Keys',
         'nl': 'Toetsen',
     },
     'key.next_does': {
-        'en': 'next stage (fades)',
-        'nl': 'volgende stage (met fade)',
+        'en': 'next scene (fades)',
+        'nl': 'volgende scène (met fade)',
     },
     'key.back_does': {
-        'en': 'previous stage',
-        'nl': 'vorige stage',
+        'en': 'previous scene',
+        'nl': 'vorige scène',
     },
     'key.twice_does': {
         'en': 'twice quickly during a fade: skips it, so quick presses step straight through',
@@ -117,24 +117,24 @@ TEXTS = {
         'nl': 'Als er iets misgaat',
     },
     'run.trouble_restart': {
-        'en': 'After Q or a restart the show begins at stage 1. To get back to where you were, press the right arrow quickly a few times: a second press during a fade skips it. The stage number is in the first column of the cue list and in the L label.',
-        'nl': 'Na Q of een herstart begint de show bij stage 1. Terug naar waar je was: druk een paar keer snel op het pijltje naar rechts; een tweede druk tijdens een fade slaat hem over. Het stagenummer staat in de eerste kolom van de cuelijst en in het L-label.',
+        'en': 'After Q or a restart the show begins at scene 1. To get back to where you were, press the right arrow quickly a few times: a second press during a fade skips it. The scene number is in the first column of the cue list and in the L label.',
+        'nl': 'Na Q of een herstart begint de show bij scène 1. Terug naar waar je was: druk een paar keer snel op het pijltje naar rechts; een tweede druk tijdens een fade slaat hem over. Het scènenummer staat in de eerste kolom van de cuelijst en in het L-label.',
     },
     'run.trouble_backup': {
-        'en': 'Last resort: backup.pdf holds every stage full screen in show order (column "backup" below gives the page). Open it full screen on the projector; no fades, no spots dimming with the desk.',
-        'nl': 'Laatste redmiddel: backup.pdf bevat elke stage schermvullend in showvolgorde (kolom "backup" hieronder geeft de pagina). Open hem schermvullend op de beamer; geen fades, geen spots die met de tafel dimmen.',
+        'en': 'Last resort: backup.pdf holds every scene full screen in show order (column "backup" below gives the page). Open it full screen on the projector; no fades, no spots dimming with the desk.',
+        'nl': 'Laatste redmiddel: backup.pdf bevat elke scène schermvullend in showvolgorde (kolom "backup" hieronder geeft de pagina). Open hem schermvullend op de beamer; geen fades, geen spots die met de tafel dimmen.',
     },
     'run.columns': {
         'en': 'Columns',
         'nl': 'Kolommen',
     },
     'run.columns_note': {
-        'en': 'IN: how the stage is reached and its fade. STANDS: what it does until the next step. t = seconds from the last key press until the stage is fully in. Grey text = the same as the stage before. A row of small pictures = the combinations of a slideshow, with the moment each comes up after entering.',
-        'nl': 'IN: hoe de stage bereikt wordt en zijn fade. STAAT: wat hij doet tot de volgende stap. t = seconden van de laatste toets tot de stage helemaal in beeld is. Grijze tekst = hetzelfde als de stage ervoor. Een rij kleine beelden = de combinaties van een slideshow, met het moment waarop elk verschijnt na binnenkomst.',
+        'en': 'IN: how the scene is reached and its fade. STANDS: what it does until the next step. t = seconds from the last key press until the scene is fully in. Grey text = the same as the scene before. A row of small pictures = the combinations of a slideshow, with the moment each comes up after entering.',
+        'nl': 'IN: hoe de scène bereikt wordt en haar fade. STAAT: wat ze doet tot de volgende stap. t = seconden van de laatste toets tot de scène helemaal in beeld is. Grijze tekst = hetzelfde als de scène ervoor. Een rij kleine beelden = de combinaties van een slideshow, met het moment waarop elk verschijnt na binnenkomst.',
     },
     'run.cue_list': {
-        'en': 'Cue list · stages {first}-{last} of {n}',
-        'nl': 'Cuelijst · stages {first}-{last} van {n}',
+        'en': 'Cue list · scenes {first}-{last} of {n}',
+        'nl': 'Cuelijst · scènes {first}-{last} van {n}',
     },
     'col.picture': {
         'en': 'picture',
@@ -164,9 +164,9 @@ TEXTS = {
         'en': 'the key on #{k}',
         'nl': 'de toets op #{k}',
     },
-    'run.last_stage': {
-        'en': 'last stage: a step key does nothing',
-        'nl': 'laatste stage: een staptoets doet niets',
+    'run.last_scene': {
+        'en': 'last scene: a step key does nothing',
+        'nl': 'laatste scène: een staptoets doet niets',
     },
     'run.holds': {
         'en': 'holds {t}, then goes on by itself (a key goes earlier)',
@@ -432,15 +432,15 @@ TEXTS = {
         'en': 'spot (picture and fill)',
         'nl': 'spot (beeld en vulling)',
     },
-    'config.stage_spot': {
-        'en': 'The spot on a stage: {name}',
-        'nl': 'De spot op een stage: {name}',
+    'config.scene_spot': {
+        'en': 'The spot on a scene: {name}',
+        'nl': 'De spot op een scène: {name}',
     },
     'config.with_spot_show': {
         'en': 'with the spot, as in the show',
         'nl': 'met de spot, zoals in de show',
     },
-    'config.stage_spot_note': {
+    'config.scene_spot_note': {
         'en': "The spot brightens each frame around its aim point and lets the edges fall back to {edge}, so the frames look lit by the theatre light. As the desk dims the light the pool flattens first (spot_collapse {collapse}); at full light nothing changes. The colour comes from look.temperature ({kelvin} K) or the desk's cct channel.",
         'nl': 'De spot maakt elke lijst lichter rond zijn richtpunt en laat de randen terugvallen naar {edge}, zodat de lijsten door het theaterlicht verlicht lijken. Als de tafel het licht dimt, vlakt de vlek eerst af (spot_collapse {collapse}); bij vol licht verandert er niets. De kleur komt van look.temperature ({kelvin} K) of het cct-kanaal van de tafel.',
     },
@@ -472,9 +472,9 @@ TEXTS = {
         'en': ' (continued)',
         'nl': ' (vervolg)',
     },
-    'run.stage': {
-        'en': 'stage',
-        'nl': 'stage',
+    'run.scene': {
+        'en': 'scene',
+        'nl': 'scène',
     },
     'run.fade': {
         'en': 'fade {t}',
@@ -525,8 +525,8 @@ TEXTS = {
         'nl': 'Spatie',
     },
     'key.l_does': {
-        'en': 'stage label on/off (drawn in the projection itself)',
-        'nl': 'stagelabel aan/uit (in de projectie zelf getekend)',
+        'en': 'scene label on/off (drawn in the projection itself)',
+        'nl': 'scènelabel aan/uit (in de projectie zelf getekend)',
     },
     'key.p_does': {
         'en': 'state blocks top right: half, full, off',

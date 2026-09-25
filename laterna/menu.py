@@ -16,7 +16,7 @@ The apps, in show order:
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
   6  export            (config, run sheet and backup as PDF -> _output/)
-  7  present           (play the stages from scenes.yaml)
+  7  present           (play the scenes from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse
 the menu's fullscreen display, so there is no mode switch (no flicker):

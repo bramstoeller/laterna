@@ -1,18 +1,18 @@
 """The PDF documents of the export (laterna/export.py), with reportlab.
 
 Layout only: export.py renders the pictures and hands them in with the
-parsed config and stages. Three documents:
+parsed config and scenes. Three documents:
 
   config_sheet  calibration, frame shapes, look, the pretend spot, DMX
                 and config.yaml itself (A4 landscape)
-  run_sheet     the operator's cue list: every stage numbered as play.py's
+  run_sheet     the operator's cue list: every scene numbered as play.py's
                 L label numbers it, how it is reached, what it does while
                 it stands, what is on each object, where it is in the
                 backup (A4 landscape)
-  backup        every stage full screen, one page per picture at the
+  backup        every scene full screen, one page per picture at the
                 canvas's aspect ratio, in show order (blackouts as black
                 pages, one page per distinct combination of slideshow
-                pictures), with an outline per stage
+                pictures), with an outline per scene
 
 The page helpers work top-down in points (y grows downwards), like the
 screen; Doc converts to reportlab's bottom-up coordinates. Only the
@@ -48,7 +48,7 @@ ORANGE = (0.75, 0.48, 0.10)
 RED = (0.75, 0.22, 0.17)
 BLUE = (0.18, 0.40, 0.56)
 DESK = (0.15, 0.28, 0.75)  # a step the desk can take too (the blue state block)
-STRIP_OFF = (0.92, 0.91, 0.88)  # a stage cell in the strip
+STRIP_OFF = (0.92, 0.91, 0.88)  # a scene cell in the strip
 NIGHT = (0.04, 0.04, 0.04)
 WOOD = (0.16, 0.12, 0.08)
 GILT = (0.82, 0.67, 0.33)
@@ -277,21 +277,21 @@ def table(doc, x, y, rows, widths, size=8, head=None, lead=13):
 
 
 # ============================================================================
-# the stages as the operator meets them
+# the scenes as the operator meets them
 
 
-def stage_facts(stages, fades):
-    """Per stage: how it is reached and what it does, as play.py plays it.
+def scene_facts(scenes, fades):
+    """Per scene: how it is reached and what it does, as play.py plays it.
 
     entry: 'start' (shown when the show starts), 'key' (a step key) or
-    'auto' (the previous stage's hold ran out); fade: the transition into
+    'auto' (the previous scene's hold ran out); fade: the transition into
     it; hold: seconds it stands before moving on by itself (None = waits);
-    since: (index of the stage the last key was pressed on, or None for
-    the start of the show; seconds from then until this stage is fully
-    in) for stages reached by themselves."""
+    since: (index of the scene the last key was pressed on, or None for
+    the start of the show; seconds from then until this scene is fully
+    in) for scenes reached by themselves."""
     facts = []
-    for i, st in enumerate(stages):
-        prev = stages[i - 1] if i else None
+    for i, st in enumerate(scenes):
+        prev = scenes[i - 1] if i else None
         entry = 'start' if i == 0 else ('auto' if prev.get('hold') is not None else 'key')
         fade = fades[i - 1] if i else 0.0
         since = None
@@ -300,7 +300,7 @@ def stage_facts(stages, fades):
             if before['since']:
                 key, t = before['since']
             elif before['entry'] == 'key':
-                key, t = i - 2, before['fade']  # the key pressed on the stage before it
+                key, t = i - 2, before['fade']  # the key pressed on the scene before it
             else:
                 key, t = None, 0.0  # counted from the start of the show
             since = (key, t + prev['hold'] + fade)
@@ -310,7 +310,7 @@ def stage_facts(stages, fades):
                 'fade': fade,
                 'hold': st.get('hold'),
                 'since': since,
-                'last': i == len(stages) - 1,
+                'last': i == len(scenes) - 1,
             }
         )
     return facts
@@ -326,13 +326,13 @@ def _media_label(m):
     return 'image', stem
 
 
-def object_contents(stage, cfg):
-    """{object id: (kind, text)} of what a stage shows on each object;
+def object_contents(scene, cfg):
+    """{object id: (kind, text)} of what a scene shows on each object;
     kind is black, fill, image, video or slideshow."""
-    if stage.get('blackout'):
+    if scene.get('blackout'):
         return {o['id']: ('black', tr('run.black')) for o in cfg['objects']}
     out = {o['id']: ('fill', tr('run.fill')) for o in cfg['objects']}
-    for m in stage.get('mappings', []):
+    for m in scene.get('mappings', []):
         for oid in m['objects']:
             out[oid] = _media_label(m)
     return out
@@ -342,7 +342,7 @@ ENTRY = {'start': ('START', MUTED), 'key': ('KEY', GREEN), 'auto': ('AUTO', ORAN
 
 
 def _step_mark(doc, mid, y, kind, gap):
-    """The step into a stage, drawn in the gap before its cell (top at y):
+    """The step into a scene, drawn in the gap before its cell (top at y):
     key / desk a line, auto a wedge pointing on."""
     if kind == 'auto':
         w = gap / 2 + 1.5
@@ -361,27 +361,27 @@ def _media_icon(doc, x, y, kind, color):
         doc.rect(x, y + 1.4, 5, 3.6, fill=STRIP_OFF, stroke=color, lw=0.6)
 
 
-def _stage_kinds(stage):
-    """The media kinds a stage shows, for the strip's icons."""
-    maps = stage.get('mappings', [])
+def _scene_kinds(scene):
+    """The media kinds a scene shows, for the strip's icons."""
+    maps = scene.get('mappings', [])
     return [k for k in ('slideshow', 'video') if any(k in m for m in maps)]
 
 
-def _strip(doc, y, stages, facts):
-    """All stages as numbered cells across the page, black for a blackout,
+def _strip(doc, y, scenes, facts):
+    """All scenes as numbered cells across the page, black for a blackout,
     with an icon for a slideshow or a video; the step into each is drawn in
     the gap before it: a green line = on a key, blue = on a key or by the
     desk (a blackout on either side, see play.py), an orange wedge = by
     itself."""
-    n = len(stages)
+    n = len(scenes)
     gap = 5 if n <= 40 else (3 if n <= 80 else 2)
     cell = (doc.w - 2 * M - gap * (n - 1)) / n
     for j in range(n):
         x = M + j * (cell + gap)
-        dark = bool(stages[j].get('blackout'))
+        dark = bool(scenes[j].get('blackout'))
         doc.rect(x, y, cell, 14, fill=NIGHT if dark else STRIP_OFF)
-        if j:  # the step into stage j
-            desk = dark or stages[j - 1].get('blackout')
+        if j:  # the step into scene j
+            desk = dark or scenes[j - 1].get('blackout')
             kind = 'auto' if facts[j]['entry'] == 'auto' else ('desk' if desk else 'key')
             _step_mark(doc, x - gap / 2, y, kind, gap)
         if cell >= 11:
@@ -395,7 +395,7 @@ def _strip(doc, y, stages, facts):
                 'center',
             )
         if cell >= 30:
-            for k, kind in enumerate(_stage_kinds(stages[j])):
+            for k, kind in enumerate(_scene_kinds(scenes[j])):
                 _media_icon(doc, x + cell - 10 - 9 * k, y + 4.5, kind, MUTED)
     return y + 14
 
@@ -451,14 +451,14 @@ BLOCKS = [  # colour, i18n block.<name> and block.<name>_means, blocks drawn
 ]
 
 
-def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, description=None):
-    """The operator's cue list. views[i] = export.stage_views of stage i
-    (thumb None for a blackout); backup_pages[i] = first page of stage i
-    in the backup; description = the scenes file's own, and each stage's
+def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, description=None):
+    """The operator's cue list. views[i] = export.scene_views of scene i
+    (thumb None for a blackout); backup_pages[i] = first page of scene i
+    in the backup; description = the scenes file's own, and each scene's
     `description` goes under its row."""
     i18n.use(cfg.get('language'))
-    facts = stage_facts(stages, fades)
-    n = len(stages)
+    facts = scene_facts(scenes, fades)
+    n = len(scenes)
     show = show_name(cfg)
     doc = Doc(
         path,
@@ -508,7 +508,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
     y = 118
     if description:
         y = doc.para(M, y + 4, description, 9, doc.w - 2 * M) + 2
-    y = _strip(doc, y, stages, facts)
+    y = _strip(doc, y, scenes, facts)
     _strip_legend(doc, M, y + 13)
 
     x2 = M + 380
@@ -561,13 +561,13 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
 
     def head(first, last):
         _page_head(doc, tr('run.title'), source)
-        _strip(doc, 40, stages, facts)
+        _strip(doc, 40, scenes, facts)
         doc.text(M, 80, tr('run.cue_list', first=first + 1, last=last + 1, n=n), 14, True)
         y = 98
         cols = [
             (X_NUM, '#'),
             (X_PIC, tr('col.picture')),
-            (X_NAME, tr('run.stage')),
+            (X_NAME, tr('run.scene')),
             (X_IN, tr('col.in')),
             (X_STANDS, tr('col.stands')),
         ]
@@ -583,7 +583,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
         return y + 6
 
     def notes(i):
-        text = stages[i].get('description')
+        text = scenes[i].get('description')
         return doc.wrap(' '.join(str(text).split()), 7.5, X_BACKUP - X_NAME) if text else []
 
     def row_height(i):
@@ -613,7 +613,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
         doc.new_page()
         y = head(rows[0], rows[-1])
         for i in rows:
-            st, f = stages[i], facts[i]
+            st, f = scenes[i], facts[i]
             h = row_height(i)
             doc.line(M, y, doc.w - M, y)
             _, col = ENTRY[f['entry']]
@@ -643,7 +643,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
                 )
             # stands
             if f['last']:
-                stands = tr('run.last_stage')
+                stands = tr('run.last_scene')
             elif f['hold'] is not None:
                 stands = tr('run.holds', t=secs(f['hold']))
             else:
@@ -664,7 +664,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
             doc.para(X_STANDS, y + 15, stands, 7.5, X_OBJ - X_STANDS - 8, lead=1.3)
             # objects
             now = object_contents(st, cfg)
-            before = object_contents(stages[i - 1], cfg) if i else {}
+            before = object_contents(scenes[i - 1], cfg) if i else {}
             if st.get('blackout'):
                 doc.text(X_OBJ, y + 15, tr('run.all_black'), 8, color=MUTED)
             elif split:
@@ -706,7 +706,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
                 else tr('run.pages', first=first, last=last)
             )
             doc.text(X_BACKUP, y + 15, page, 8)
-            # the stage's description, then the slideshow combinations
+            # the scene's description, then the slideshow combinations
             sy = y + PIC_W * aspect + 12
             for line in notes(i):
                 doc.text(X_NAME, sy + 4, line, 7.5)
@@ -735,16 +735,16 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
     doc.save()
 
 
-def backup(path, cfg, stages, views):
+def backup(path, cfg, scenes, views):
     """Every picture full screen, at the canvas's aspect ratio. Returns the
-    first page number of every stage."""
+    first page number of every scene."""
     i18n.use(cfg.get('language'))
     w, h = cfg['canvas']
     size = (w * 0.5, h * 0.5)  # 960 x 600 pt at 1920 x 1200: the pixels at 144 dpi
     doc = Doc(path, tr('backup.title'), pagesize=size, show=show_name(cfg))
     firsts = []
-    n = len(stages)
-    for i, st in enumerate(stages):
+    n = len(scenes)
+    for i, st in enumerate(scenes):
         firsts.append(doc.page if i == 0 else doc.page + 1)
         for k, v in enumerate(views[i]):
             if i or k:
@@ -1223,15 +1223,15 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         rx += 390
         y = top + 7
 
-    # --- the spot on a stage -----------------------------------------------
-    if extras.get('stage_spot') is not None:
+    # --- the spot on a scene -----------------------------------------------
+    if extras.get('scene_spot') is not None:
         doc.new_page()
-        head(tr('config.stage_spot', name=extras['stage_name']))
+        head(tr('config.scene_spot', name=extras['scene_name']))
         iw = (doc.w - 2 * M - 10) / 2
         for k, (img, t) in enumerate(
             (
-                (extras['stage_spot'], tr('config.with_spot_show')),
-                (extras['stage_flat'], tr('config.without_spot')),
+                (extras['scene_spot'], tr('config.with_spot_show')),
+                (extras['scene_flat'], tr('config.without_spot')),
             )
         ):
             x = M + k * (iw + 10)
@@ -1242,7 +1242,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             M,
             80 + iw * asp + 32,
             tr(
-                'config.stage_spot_note',
+                'config.scene_spot_note',
                 edge=num(1 - float(spot.get('strength', 0)), 2),
                 collapse=num(look.get('spot_collapse', 0), 2),
                 kelvin=num(look.get('temperature', 6500), 0),

@@ -1,18 +1,18 @@
-# Example stages, played in order by step 7 (present). The two pictures in
+# Example scenes, played in order by step 7 (present). The two pictures in
 # images/ are public-domain paintings from Wikimedia Commons, small and
 # low quality on purpose: Katsushika Hokusai, The Great Wave off Kanagawa
 # (c. 1831), and Johannes Vermeer, Girl with a Pearl Earring (c. 1665).
 #
-# A stage maps media onto object ids (from config.yaml):
+# A scene maps media onto object ids (from config.yaml):
 #   image: images/<file>        a still picture
 #   video: videos/<file>        a clip, looping inside the frame
 #   slideshow: [file, ...]      pictures in turn, `hold` seconds each
 #   fit: [ids]                  size the medium over several frames together
-# Per stage: hold (seconds before moving on by itself; none = wait for a
+# Per scene: hold (seconds before moving on by itself; none = wait for a
 # key), transition / transition_time, molding_color, fill_color, blackout.
 transition: fade
 transition_time: 2.0
-stages:
+scenes:
   - name: pictures                # one painting per frame; waits for a key
     mappings:
       - image: images/great-wave.jpg

@@ -43,7 +43,7 @@ import numpy as np
 ROUND_BELOW_DEG = 45.0  # a corner turning less than this is a fillet
 STEP_MM = 2.0  # chord length the fillets are flattened to
 COLOR = (210, 170, 85)  # the molding as drawn (shaded by render.py)
-FILL = (55, 46, 32)  # the screen where a stage maps nothing
+FILL = (55, 46, 32)  # the screen where a scene maps nothing
 
 
 def offset_polyline(points, offset, closed):

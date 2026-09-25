@@ -1,7 +1,7 @@
 """Projection rendering: config loading, transforms, molding shading, and
-stage rendering (images mapped onto the objects).
+scene rendering (images mapped onto the objects).
 
-Coordinates: world millimetres with (0,0) = bottom centre of the stage
+Coordinates: world millimetres with (0,0) = bottom centre of the scene
 (x negative to the left, y up). The canvas is the projector image
 (`canvas` in config.yaml, the projector's native pixels); world (0,0) maps
 to the bottom centre of the image, shifted by
@@ -134,7 +134,7 @@ def object_round_canvas_world(cfg, obj):
 
 def object_fills_world(cfg, obj):
     """Screen polygons with their fill colour: [(points world mm, rgb)]. The
-    fill shows wherever a stage maps no image or video onto the object."""
+    fill shows wherever a scene maps no image or video onto the object."""
     return [
         (_local_to_world(p['points'], obj), tuple(int(c) for c in p['color']))
         for p in object_shape(cfg, obj)['polygons']
@@ -471,7 +471,7 @@ def molding_rgb(base, shade, highlight):
     (shade, highlight) terms (n,) from compute_molding. Gold: shadows go
     warm brown, highlights towards a warm white. A black base still gets
     the specular glints (black lacquer), so a real blackout skips the
-    molding instead of painting it black (see StageRenderer)."""
+    molding instead of painting it black (see SceneRenderer)."""
     base = np.asarray(base, np.float32)
     return base * shade[:, None] + (0.55 * base + 0.45 * 255.0) * highlight[:, None]
 
@@ -974,64 +974,64 @@ def load_scenes(path):
         return yaml.safe_load(f)
 
 
-def parse_stages(scenes, cfg):
-    """Stages and fades from the scenes data (from load_scenes), checked
+def parse_scenes(data, cfg):
+    """Scenes and fades from the scenes data (from load_scenes), checked
     against schema.Scenes: unknown keys, wrong values and object ids that
-    config.yaml does not have are errors naming the stage.
+    config.yaml does not have are errors naming the scene.
 
     Timing, in the words of a slideshow mapping: the top of scenes.yaml
-    gives the defaults `hold` (seconds a stage stays before the show moves
+    gives the defaults `hold` (seconds a scene stays before the show moves
     on by itself; none = it waits for a key), `transition` (only `fade`)
-    and `transition_time` (seconds the fade to the next stage takes; the
-    older `fade:` means the same). A stage overrides them with the same
-    keys, and a `- fade: <seconds>` entry between two stages still sets
-    that one transition (not together with the previous stage's
-    transition_time). Every stage comes out with `hold` (float or None)
+    and `transition_time` (seconds the fade to the next scene takes; the
+    older `fade:` means the same). A scene overrides them with the same
+    keys, and a `- fade: <seconds>` entry between two scenes still sets
+    that one transition (not together with the previous scene's
+    transition_time). Every scene comes out with `hold` (float or None)
     and `transition_time` filled in.
 
-    A blackout stage (`blackout: true`) is all black; its fade dims
+    A blackout scene (`blackout: true`) is all black; its fade dims
     everything together, like a master fader (play.py).
 
-    Returns (stages, fades) with fades[i] = duration between stage i and i+1.
+    Returns (scenes, fades) with fades[i] = duration between scene i and i+1.
     """
-    scenes = schema.check_scenes(scenes, [o['id'] for o in cfg['objects']])
-    top = dict(scenes)
+    data = schema.check_scenes(data, [o['id'] for o in cfg['objects']])
+    top = dict(data)
     if 'fade' in top:
         top['transition_time'] = top.pop('fade')
     timing = parse_timing(top, {'hold': None, 'transition': 'fade', 'transition_time': 1.0})
-    stages, fades, pending = [], [], None
-    for entry in scenes['stages']:
-        if 'fade' in entry:  # a `- fade:` entry between two stages
+    scenes, fades, pending = [], [], None
+    for entry in data['scenes']:
+        if 'fade' in entry:  # a `- fade:` entry between two scenes
             pending = entry['fade']
             continue
         entry = {**entry, **parse_timing(entry, timing)}
         if entry.get('blackout'):
             entry['mappings'] = []
-        for key in STAGE_COLORS:
+        for key in SCENE_COLORS:
             if key in entry:
                 entry[key] = tuple(entry[key])
-        if stages:
-            previous = stages[-1]
+        if scenes:
+            previous = scenes[-1]
             if pending is not None and 'transition_time' in previous.get('_own', ()):
                 raise ValueError(
-                    f'stage {previous.get("name")} sets transition_time '
+                    f'scene {previous.get("name")} sets transition_time '
                     f'and is followed by a `- fade:` entry: pick one'
                 )
             fades.append(previous['transition_time'] if pending is None else pending)
         pending = None
-        stages.append(entry)
-    return stages, fades
+        scenes.append(entry)
+    return scenes, fades
 
 
-# stage-level colours: the molding's base colour and the fill of the
+# scene-level colours: the molding's base colour and the fill of the
 # unmapped objects, [r, g, b] 0..255 (defaults: frame.COLOR, frame.FILL)
-STAGE_COLORS = ('molding_color', 'fill_color')
+SCENE_COLORS = ('molding_color', 'fill_color')
 
 TIMING_KEYS = ('hold', 'transition', 'transition_time')
 
 
 def parse_timing(node, defaults):
-    """The stage timing keys of a scenes node (the file's top or a stage),
+    """The scene timing keys of a scenes node (the file's top or a scene),
     completed from `defaults`: {'hold': seconds or None, 'transition':
     'fade', 'transition_time': seconds, '_own': the keys the node set
     itself}."""
@@ -1051,21 +1051,21 @@ SLIDESHOW_DEFAULTS = {'hold': 5.0, 'transition': 'fade', 'transition_time': 1.0}
 SLIDESHOW_TRANSITIONS = ('fade',)
 
 
-class StageRenderer:
-    """Renders stages efficiently for playback.
+class SceneRenderer:
+    """Renders scenes efficiently for playback.
 
-    The molding is identical for every stage, so its shading (the expensive
+    The molding is identical for every scene, so its shading (the expensive
     part: distance transforms and lighting) is computed once in the
-    constructor and reused for each stage.
+    constructor and reused for each scene.
 
-    Layering per stage: the objects' fill colours where the stage maps
-    nothing, the stage's images fitted to the canvas inside the molding
+    Layering per scene: the objects' fill colours where the scene maps
+    nothing, the scene's images fitted to the canvas inside the molding
     (canvas_rect_px) and masked to the polygons, the frame's shadow
-    on them, then the molding on top. Without a stage (preview) every
+    on them, then the molding on top. Without a scene (preview) every
     object shows its fill. Brightness and the pretend spotlights
     (cfg['look']) are applied per layer in apply_look(); they are gains,
-    kept apart from the colours, so a stage can recolour the molding
-    (`molding_color`) or the fill (`fill_color`) cheaply. A stage with
+    kept apart from the colours, so a scene can recolour the molding
+    (`molding_color`) or the fill (`fill_color`) cheaply. A scene with
     `blackout: true` renders all black, molding included.
     """
 
@@ -1093,7 +1093,7 @@ class StageRenderer:
         self.molding_shading = shading  # (shade, highlight): recolouring
         self.molding_recolored = {}  # rgb -> shaded, unlit colours
         # a fixed dither pattern (one step, the same for every render, so a
-        # stage and its molding still cancel exactly in laterna/lamps.py): the
+        # scene and its molding still cancel exactly in laterna/lamps.py): the
         # rounding to 8 bits then becomes noise instead of contours, which
         # matters because the headroom stores the render that much darker
         self.dither = np.random.default_rng(0).random(
@@ -1135,7 +1135,7 @@ class StageRenderer:
         # the lamps can dim before the clipping (see headroom())
         white = np.ones(3, np.float32) / headroom(cfg)
         # gains (n, 3) over molding_idx and per fill polygon: brightness x
-        # spot; the colours come in per stage (_compose_ss)
+        # spot; the colours come in per scene (_compose_ss)
         self.molding_gain = np.tile(float(look['molding']) * white, (len(self.molding_idx), 1))
         self.fill_gain = {}  # object id -> [(flat indices, gain (n, 3))]
         self.image_gain = {}  # object id -> (n, 3) gain over inside_idx, or None
@@ -1180,25 +1180,25 @@ class StageRenderer:
             base = self.molding_recolored[key]
         return base * self.molding_gain
 
-    def _compose_ss(self, stage):
-        """Supersampled float32 canvas for a stage. Video mappings stay black
+    def _compose_ss(self, scene):
+        """Supersampled float32 canvas for a scene. Video mappings stay black
         here: their polygons are filled per frame during playback (laterna/video.py),
         so the static render doubles as the premultiplied colour layer.
-        A blackout stage is black throughout."""
+        A blackout scene is black throughout."""
         canvas = np.zeros(self.shape + (3,), np.float32)
-        if stage is not None and stage.get('blackout'):
+        if scene is not None and scene.get('blackout'):
             return canvas
         flat = canvas.reshape(-1, 3)
-        stage_fill = (stage or {}).get('fill_color')
-        mapped = {i for m in (stage or {}).get('mappings', []) for i in m['objects']}
+        scene_fill = (scene or {}).get('fill_color')
+        mapped = {i for m in (scene or {}).get('mappings', []) for i in m['objects']}
         for oid, fills in self.fill_gain.items():
             if oid not in mapped:
                 for (idx, gain), (_, color) in zip(fills, self.fill_base[oid]):
-                    base = color if stage_fill is None else np.asarray(stage_fill, np.float32)
+                    base = color if scene_fill is None else np.asarray(scene_fill, np.float32)
                     flat[idx] = base * gain
         flat[self.strip_idx] = 0.0
-        if stage is not None:
-            for m in stage.get('mappings', []):
+        if scene is not None:
+            for m in scene.get('mappings', []):
                 if 'image' not in m:
                     continue
                 _draw_mapping(
@@ -1214,7 +1214,7 @@ class StageRenderer:
                         flat[self.inside_idx[oid]] *= self.image_gain[oid]
         # the frame's shadow on the picture, then the molding on top
         flat[self.fade_idx] *= self.fade[:, None]
-        flat[self.molding_idx] = self.molding_colors((stage or {}).get('molding_color'))
+        flat[self.molding_idx] = self.molding_colors((scene or {}).get('molding_color'))
         return canvas
 
     def _quantise(self, out):
@@ -1227,25 +1227,25 @@ class StageRenderer:
         canvas = keystone_image(canvas, self.cfg, self.ss, border)
         return cv2.resize(canvas, self.out_size, interpolation=cv2.INTER_AREA)
 
-    def render(self, stage=None):
-        out = self._down(self._compose_ss(stage))
+    def render(self, scene=None):
+        out = self._down(self._compose_ss(scene))
         return apply_gamma(self._quantise(out), self.lut)
 
-    def render_molding(self, stage=None):
-        """The stage's molding alone, everything else black (all black for
+    def render_molding(self, scene=None):
+        """The scene's molding alone, everything else black (all black for
         a blackout): what splits a render into pictures and molding, so the
         lamps (laterna/lamps.py) can dim them apart."""
         canvas = np.zeros(self.shape + (3,), np.float32)
-        if stage is None or not stage.get('blackout'):
+        if scene is None or not scene.get('blackout'):
             flat = canvas.reshape(-1, 3)
-            flat[self.molding_idx] = self.molding_colors((stage or {}).get('molding_color'))
+            flat[self.molding_idx] = self.molding_colors((scene or {}).get('molding_color'))
         out = self._down(canvas)
         return apply_gamma(self._quantise(out), self.lut)
 
-    def video_alpha(self, stage):
-        """Coverage of the static render over a stage's video and slideshow
+    def video_alpha(self, scene):
+        """Coverage of the static render over a scene's video and slideshow
         regions, as a uint8 layer (255 = static wins, 0 = video fully
-        visible), or None when the stage maps no videos or slideshows.
+        visible), or None when the scene maps no videos or slideshows.
 
         Built at the supersampling and averaged down like the colours, so
         the fractional edge values carry the anti-aliasing. Inside a video
@@ -1254,7 +1254,7 @@ class StageRenderer:
         is opaque on top. render() leaves video polygons black,
         which is exactly colour x alpha (premultiplied), so playback is
         one blend: video * (1 - alpha) + render."""
-        video_maps = [m for m in stage.get('mappings', []) if is_animated(m)]
+        video_maps = [m for m in scene.get('mappings', []) if is_animated(m)]
         if not video_maps:
             return None
         alpha = np.ones(self.shape, np.float32)
@@ -1267,14 +1267,14 @@ class StageRenderer:
         return (np.clip(out, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
-def render_stage(cfg, stage=None, ss=3):
-    """One-off render; for many stages reuse a StageRenderer instead."""
-    return StageRenderer(cfg, ss).render(stage)
+def render_scene(cfg, scene=None, ss=3):
+    """One-off render; for many scenes reuse a SceneRenderer instead."""
+    return SceneRenderer(cfg, ss).render(scene)
 
 
 def render_canvas(cfg, ss=3):
-    """Just the frames, without stage images."""
-    return render_stage(cfg, None, ss)
+    """Just the frames, without scene images."""
+    return render_scene(cfg, None, ss)
 
 
 def save_png(image_rgb, path):

@@ -1,8 +1,8 @@
-"""Video playback inside stages: looping clips composited into the polygons.
+"""Video playback inside scenes: looping clips composited into the polygons.
 
-A stage's static parts (molding, separator, mapped images, black) come from
-render.StageRenderer as a premultiplied base plus an alpha layer (see
-StageRenderer.video_alpha). Per video frame only the pixels inside the
+A scene's static parts (molding, separator, mapped images, black) come from
+render.SceneRenderer as a premultiplied base plus an alpha layer (see
+SceneRenderer.video_alpha). Per video frame only the pixels inside the
 mapping's own polygons change:
 
     out = frame * (1 - alpha) + base
@@ -24,8 +24,8 @@ of a running transition (`transition: fade`) is written into the canvas;
 during a hold of an image nothing is redrawn. A video slide (recognised by
 its extension) owns a VideoClip that starts when the slide fades in, plays
 for the slide's hold (looping when shorter, cut when longer) and is
-composited per frame like a stage video. The slideshow timeline
-(SlideshowClip) lives in the same clip pool as the stage videos and loops
+composited per frame like a scene video. The slideshow timeline
+(SlideshowClip) lives in the same clip pool as the scene videos and loops
 the same way.
 """
 
@@ -106,7 +106,7 @@ class SlideshowClip:
 
     Offers the part of the VideoClip interface the player relies on (t0,
     rewind, pos), so a slideshow shares the clip pool with the videos and,
-    like them, runs on seamlessly when the next stage maps the same show.
+    like them, runs on seamlessly when the next scene maps the same show.
     Every slide holds `hold` seconds, then fades in `transition_time`
     seconds to the next; after the last one the show wraps to the first."""
 
@@ -301,8 +301,8 @@ def _slide_rows(spec, k, local_t, lut):
     return slide['rows'], clip.pos
 
 
-def build_specs(cfg, stage, base, alpha):
-    """Compositing data per video or slideshow mapping of a stage.
+def build_specs(cfg, scene, base, alpha):
+    """Compositing data per video or slideshow mapping of a scene.
 
     Each clip covers its mapping rect (cover-fit over the bounding box of
     its polygons or its `fit:` list, or the exact size of an explicit
@@ -310,11 +310,11 @@ def build_specs(cfg, stage, base, alpha):
     through the pixel indices of the mapped polygons themselves, so
     neighbouring polygons inside the rect are never touched. The blend weights come from the alpha layer and
     the base doubles as the premultiplied static colour."""
-    mappings = [m for m in stage.get('mappings', []) if render.is_animated(m)]
+    mappings = [m for m in scene.get('mappings', []) if render.is_animated(m)]
     if not mappings:
         return []
     if alpha is None:
-        raise ValueError('stage maps videos or slideshows but has no alpha layer')
+        raise ValueError('scene maps videos or slideshows but has no alpha layer')
     lut = render.gamma_lut(cfg)  # slides get the same correction as frames
     h, w = base.shape[:2]
     inv_alpha = 1.0 - alpha.reshape(-1).astype(np.float32) / 255.0
@@ -380,17 +380,17 @@ def _new_clip(spec):
     return VideoClip(spec['path'])
 
 
-class StagePlayer:
-    """Playback state of one stage: the static base plus, when the stage
+class ScenePlayer:
+    """Playback state of one scene: the static base plus, when the scene
     maps videos, a working canvas the due frames composite into.
 
     Clips (videos and slideshow timelines) come from a shared pool, and
     each clip carries its own timeline: a clip that is already playing in
-    the outgoing stage keeps running seamlessly when the next stage maps
+    the outgoing scene keeps running seamlessly when the next scene maps
     the same file (or the same slideshow), instead of starting over."""
 
-    def __init__(self, cfg, stage, base, alpha, pool=None):
-        self.specs = build_specs(cfg, stage, base, alpha)
+    def __init__(self, cfg, scene, base, alpha, pool=None):
+        self.specs = build_specs(cfg, scene, base, alpha)
         self.lut = render.gamma_lut(cfg)  # video frames get the same correction
         self.base = base
         self.canvas = base.copy() if self.specs else base
@@ -405,8 +405,8 @@ class StagePlayer:
         return set(self.clips)
 
     def stop(self, keep=()):
-        """Stop this stage's clips so they restart on the next entry —
-        except the ones in `keep`, which the next stage keeps playing."""
+        """Stop this scene's clips so they restart on the next entry —
+        except the ones in `keep`, which the next scene keeps playing."""
         for path, clip in self.clips.items():
             if path not in keep:
                 clip.t0 = None

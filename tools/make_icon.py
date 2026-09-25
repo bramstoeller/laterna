@@ -46,7 +46,7 @@ def icon_config():
 
 def main():
     cfg = icon_config()
-    renderer = render.StageRenderer(cfg, ss=3)
+    renderer = render.SceneRenderer(cfg, ss=3)
     rgb = renderer.render({'name': 'icon', 'mappings': []})  # fill colour + spot, no picture
     rgb = render.full_power(rgb, cfg)  # the icon is a still: no lamps to give the headroom back
     # alpha: the frame's silhouette, downsampled like the colours for a soft edge

@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """Look: brightness per layer and the pretend spotlights (`look` in config.yaml).
 
-Shows the stages from scenes.yaml as the presentation renders them (no
+Shows the scenes from scenes.yaml as the presentation renders them (no
 fades; video polygons stay black here) and lets you tune, live. The
 first view has every canvas white (the light itself, on a blank
-canvas). Blackout stages are skipped (nothing to look at) and a stage
+canvas). Blackout scenes are skipped (nothing to look at) and a scene
 with slideshows is shown once per slide: view k has every slideshow of
-the stage on its k-th image (shorter ones wrap), so each image gets
+the scene on its k-th image (shorter ones wrap), so each image gets
 seen. Tune:
 
   brightness of the molding, of the fill colours and of the images/videos
@@ -35,7 +35,7 @@ Keys:
   Tab            next page (look / picture spot / molding spot / desk)
   up / down      adjust the selected setting  (with Shift: x5); on the desk
                  page the key repeats while held, so a fader slides
-  left / right   previous / next stage
+  left / right   previous / next scene
   T              reset all settings to the values at startup
   S              save to config.yaml
   R              reload config.yaml and rebuild the molding (after editing
@@ -144,25 +144,25 @@ def adjust(look, setting, steps):
 WHITE_VIEW = {'name': 'white canvases', 'fill_color': (255, 255, 255), 'mappings': []}
 
 
-def views(stages):
-    """The stages as the look app shows them: first every canvas white
-    (the light on a blank canvas), then the stages with blackouts left
-    out and a stage with slideshows expanded to one view per slide (the
-    k-th image of every slideshow in the stage; video items keep their
-    `video:` and stay black, like video mappings). Each view is a stage
+def views(scenes):
+    """The scenes as the look app shows them: first every canvas white
+    (the light on a blank canvas), then the scenes with blackouts left
+    out and a scene with slideshows expanded to one view per slide (the
+    k-th image of every slideshow in the scene; video items keep their
+    `video:` and stay black, like video mappings). Each view is a scene
     dict render() accepts."""
     out = [WHITE_VIEW]
-    for stage in stages:
-        if stage.get('blackout'):
+    for scene in scenes:
+        if scene.get('blackout'):
             continue
-        shows = [m for m in stage.get('mappings', []) if 'slideshow' in m]
+        shows = [m for m in scene.get('mappings', []) if 'slideshow' in m]
         if not shows:
-            out.append(stage)
+            out.append(scene)
             continue
         count = max(len(m['slideshow']) for m in shows)
         for k in range(count):
             mappings = []
-            for m in stage['mappings']:
+            for m in scene['mappings']:
                 if 'slideshow' in m:
                     item = m['slideshow'][k % len(m['slideshow'])]
                     m = {
@@ -176,8 +176,8 @@ def views(stages):
                 mappings.append(m)
             out.append(
                 {
-                    **stage,
-                    'name': f'{stage.get("name", "?")} [{k + 1}/{count}]',
+                    **scene,
+                    'name': f'{scene.get("name", "?")} [{k + 1}/{count}]',
                     'mappings': mappings,
                 }
             )
@@ -185,18 +185,18 @@ def views(stages):
 
 
 def load_views(scenes_path, cfg):
-    stages, _ = render.parse_stages(render.load_scenes(scenes_path), cfg)
-    return views(stages)
+    scenes, _ = render.parse_scenes(render.load_scenes(scenes_path), cfg)
+    return views(scenes)
 
 
 def self_test(cfg, scenes_path):
     """Headless check: one render plus the edit functions; does not save."""
     cfg['look'] = render.look_settings(cfg)
-    stages = load_views(scenes_path, cfg)
+    scenes = load_views(scenes_path, cfg)
     look_page, spot_page = pages(cfg['look'])[:2]
     adjust(cfg['look'], spot_page[1][0], 7)  # spot strength +0.35
     adjust(cfg['look'], look_page[1][0], -2)  # molding brightness -0.1
-    renderer = render.StageRenderer(cfg, ss=2)
+    renderer = render.SceneRenderer(cfg, ss=2)
     # what the lamps do at full light: the headroom back, in the light's colour
     gain = render.headroom_gain(cfg) * render.white_gain(
         cfg['look']['temperature'], cfg['look']['white']
@@ -205,8 +205,8 @@ def self_test(cfg, scenes_path):
     def lit(image):
         return np.clip(image.astype(np.float32) * gain, 0, 255).astype(np.uint8)
 
-    render.save_png(lit(renderer.render(stages[min(3, len(stages) - 1)])), '_renders/look.png')
-    render.save_png(lit(renderer.render(stages[0])), '_renders/look-white.png')
+    render.save_png(lit(renderer.render(scenes[min(3, len(scenes) - 1)])), '_renders/look.png')
+    render.save_png(lit(renderer.render(scenes[0])), '_renders/look-white.png')
     print('self-test ok (written: _renders/look.png, _renders/look-white.png)')
 
 
@@ -218,7 +218,7 @@ def run(
     cfg = render.load_config(config)
     cfg['look'] = render.look_settings(cfg)  # complete, so every setting exists
     snap = copy.deepcopy(cfg['look'])
-    stages = load_views(scenes_path, cfg)
+    scenes = load_views(scenes_path, cfg)
     # the desk for the desk page; a --dmx override stays out of cfg, so S
     # never saves it
     desk = dmx.Desk(
@@ -243,7 +243,7 @@ def run(
         screen.fill((0, 0, 0))
         ui.draw_help(screen, font, ['preparing the molding...'])
         pygame.display.flip()
-        return render.StageRenderer(cfg, ss=supersample)
+        return render.SceneRenderer(cfg, ss=supersample)
 
     renderer = build_renderer()
 
@@ -265,8 +265,8 @@ def run(
         desk.kelvin = float(cfg['look']['temperature'])  # the desk's cct 128
         lights.white = float(cfg['look']['white'])
         lights.collapse = float(cfg['look']['spot_collapse'])
-        surface = renderer.render(stages[idx])
-        molding = renderer.render_molding(stages[idx])
+        surface = renderer.render(scenes[idx])
+        molding = renderer.render_molding(scenes[idx])
 
     def set_page(new):
         """Switch pages; the desk page brings the faders and the mouse,
@@ -303,7 +303,7 @@ def run(
                 ui.draw_help(screen, font, lines, top=top + 20)
         elif show_help:
             lines = [
-                f'view {idx + 1}/{len(stages)}: {stages[idx].get("name", "?")}'
+                f'view {idx + 1}/{len(scenes)}: {scenes[idx].get("name", "?")}'
                 + ('   * unsaved changes *' if dirty else '')
             ]
             all_pages = pages(cfg['look'])
@@ -315,7 +315,7 @@ def run(
                     f'{mark} {(i + 1) % 10}  {setting[0]:<24s} {get_value(cfg["look"], setting):g}'
                 )
             lines += [
-                '1-9, 0 select  up/down adjust (Shift = x5)  Tab page  left/right stage',
+                '1-9, 0 select  up/down adjust (Shift = x5)  Tab page  left/right scene',
                 'T reset  S save  R reload config  H help  Q quit',
             ]
             if message:
@@ -360,7 +360,7 @@ def run(
                     dirty = True
                     rerender()
             elif event.key == pygame.K_RIGHT:
-                idx = min(idx + 1, len(stages) - 1)
+                idx = min(idx + 1, len(scenes) - 1)
                 rerender()
             elif event.key == pygame.K_LEFT:
                 idx = max(idx - 1, 0)
@@ -380,8 +380,8 @@ def run(
                 cfg = render.load_config(config)
                 cfg['look'] = render.look_settings(cfg)
                 snap = copy.deepcopy(cfg['look'])
-                stages = load_views(scenes_path, cfg)
-                idx = min(idx, len(stages) - 1)
+                scenes = load_views(scenes_path, cfg)
+                idx = min(idx, len(scenes) - 1)
                 renderer = build_renderer()
                 lights = lamps.Lamps(cfg)
                 dirty = False
@@ -410,7 +410,7 @@ def main():
     ap.add_argument('--scenes', default='scenes.yaml')
     ap.add_argument('--supersample', type=int, default=3)
     ap.add_argument(
-        '--test', action='store_true', help='self-test: render one stage with a spot, no display'
+        '--test', action='store_true', help='self-test: render one scene with a spot, no display'
     )
     ap.add_argument(
         '--dmx',

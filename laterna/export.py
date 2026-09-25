@@ -4,14 +4,14 @@ _output/ next to config.yaml (laterna/documents.py lays them out):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
-                 with and without it and a map of its strength), a stage
+                 with and without it and a map of its strength), a scene
                  with and without it, DMX, and config.yaml itself
   run-sheet.pdf  the operator's cue list: keys, state blocks, what to do
-                 when something goes wrong, then every stage with its
+                 when something goes wrong, then every scene with its
                  picture, how it is reached (key or by itself, fade, time
                  since the last key), what it does while it stands, what is
                  on each object and its page in the backup
-  backup.pdf     every stage full screen at the canvas's aspect ratio, in
+  backup.pdf     every scene full screen at the canvas's aspect ratio, in
                  show order, to show from a PDF viewer when all else fails:
                  blackouts as black pages, a slideshow as one page per
                  distinct combination of its pictures, a video as its
@@ -42,7 +42,7 @@ from . import dmx, documents, render, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_output'
-MAX_COMBINATIONS = 64  # slideshow pictures per stage in the export
+MAX_COMBINATIONS = 64  # slideshow pictures per scene in the export
 THUMB_WIDTH = 480  # px of the cue list pictures
 
 
@@ -77,8 +77,8 @@ def crop_box(cfg):
 
 def slide_combinations(timings, limit=MAX_COMBINATIONS):
     """[(t, (k per slideshow))]: the distinct combinations of pictures a
-    stage's slideshows show, in the order they first come up, with the
-    seconds after entering the stage at which each starts to fade in.
+    scene's slideshows show, in the order they first come up, with the
+    seconds after entering the scene at which each starts to fade in.
     timings = [(count, hold, transition_time)] (video.build_specs). A
     picture counts from the start of its fade-in, as SlideshowClip.step
     counts it."""
@@ -113,8 +113,8 @@ def _stem(path):
     return str(path).replace('\\', '/').split('/')[-1].rsplit('.', 1)[0]
 
 
-def stage_views(cfg, renderer, stage, gain, projector=None):
-    """The pictures of a stage as the audience sees them at full light:
+def scene_views(cfg, renderer, scene, gain, projector=None):
+    """The pictures of a scene as the audience sees them at full light:
     [{'full': JPEG bytes of the whole canvas, warped to the projector by
     `projector` (a config with its keystone; None = as rendered), or None
     (blackout), 'thumb':
@@ -122,15 +122,15 @@ def stage_views(cfg, renderer, stage, gain, projector=None):
     'changed': [picture names new in this view]}], one per distinct
     combination of slideshow pictures, videos at their first frame."""
     box = crop_box(cfg)
-    if stage.get('blackout'):
+    if scene.get('blackout'):
         return [{'full': None, 'thumb': None, 't': 0.0, 'changed': []}]
     lut = render.gamma_lut(cfg)
-    base = renderer.render(stage)
-    alpha = renderer.video_alpha(stage)
-    specs = video.build_specs(cfg, stage, base, alpha) if alpha is not None else []
+    base = renderer.render(scene)
+    alpha = renderer.video_alpha(scene)
+    specs = video.build_specs(cfg, scene, base, alpha) if alpha is not None else []
     by_path = {s['path']: s for s in specs}
     shows, fixed = [], []  # (spec, mapping) of slideshows; rows of videos
-    for m in stage.get('mappings', []):
+    for m in scene.get('mappings', []):
         if 'slideshow' in m and video._slideshow_key(m) in by_path:
             shows.append((by_path[video._slideshow_key(m)], m))
         elif 'video' in m and str(cfg['_dir'] / m['video']) in by_path:
@@ -204,14 +204,14 @@ def _widest(cfg):
     return max(cfg['objects'], key=lambda o: np.ptp(render.object_wood_world(cfg, o)[:, 0]))
 
 
-def config_renders(cfg, renderer, stages, gain):
+def config_renders(cfg, renderer, scenes, gain):
     """The pictures of the config pages (documents.config_sheet)."""
     box = crop_box(cfg)
     look = cfg['look']
     example = next(
         (
             s
-            for s in stages
+            for s in scenes
             if not s.get('blackout') and any('image' in m for m in s.get('mappings', []))
         ),
         None,
@@ -221,8 +221,8 @@ def config_renders(cfg, renderer, stages, gain):
         'crop': box,
         'headroom': render.headroom(cfg),
         'white_spot': lit(renderer.render(WHITE_VIEW), gain),
-        'stage_spot': lit(renderer.render(example), gain) if example else None,
-        'stage_name': example.get('name', '?') if example else None,
+        'scene_spot': lit(renderer.render(example), gain) if example else None,
+        'scene_name': example.get('name', '?') if example else None,
     }
     # the same without the spots: strength 0, then back
     saved = copy.deepcopy(cfg['look'])
@@ -231,7 +231,7 @@ def config_renders(cfg, renderer, stages, gain):
         cfg['look']['molding_spot']['strength'] = 0.0
     renderer.apply_look()
     extras['white_flat'] = lit(renderer.render(WHITE_VIEW), gain)
-    extras['stage_flat'] = lit(renderer.render(example), gain) if example else None
+    extras['scene_flat'] = lit(renderer.render(example), gain) if example else None
     cfg['look'] = saved
     renderer.apply_look()
     # the molding alone, top of the widest frame
@@ -288,36 +288,36 @@ def export_all(
     # warps it, the lamps' gain being per pixel)
     projector = {'canvas': cfg['canvas'], 'keystone': cfg.pop('keystone', None)}
     cfg['look'] = render.look_settings(cfg)
-    scenes = render.load_scenes(scenes_path)
-    stages, fades = render.parse_stages(scenes, cfg)
+    data = render.load_scenes(scenes_path)
+    scenes, fades = render.parse_scenes(data, cfg)
     out = pathlib.Path(out_dir) if out_dir else config.resolve().parent / EXPORT_DIR
     out.mkdir(parents=True, exist_ok=True)
     source = f'{config.name} + {scenes_path.name}'
 
     progress('computing the molding...')
-    renderer = render.StageRenderer(cfg, ss=supersample)
+    renderer = render.SceneRenderer(cfg, ss=supersample)
     gain = full_light(cfg)
     views = []
-    for i, stage in enumerate(stages):
-        progress(f'stage {i + 1}/{len(stages)}: {stage.get("name", "?")}')
-        views.append(stage_views(cfg, renderer, stage, gain, projector))
+    for i, scene in enumerate(scenes):
+        progress(f'scene {i + 1}/{len(scenes)}: {scene.get("name", "?")}')
+        views.append(scene_views(cfg, renderer, scene, gain, projector))
     progress('pictures for the config pages...')
-    extras = config_renders(cfg, renderer, stages, gain)
+    extras = config_renders(cfg, renderer, scenes, gain)
 
     paths = [out / 'backup.pdf', out / 'run-sheet.pdf', out / 'config.pdf']
     progress(f'writing {paths[0].name}...')
-    firsts = documents.backup(paths[0], cfg, stages, views)
+    firsts = documents.backup(paths[0], cfg, scenes, views)
     progress(f'writing {paths[1].name}...')
     documents.run_sheet(
         paths[1],
         cfg,
-        stages,
+        scenes,
         fades,
         views,
         firsts,
         crop_box(cfg),
         source,
-        scenes.get('description'),
+        data.get('description'),
     )
     progress(f'writing {paths[2].name}...')
     documents.config_sheet(
@@ -351,7 +351,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
                 raise Cancelled
         done.append(text)
         draw(
-            ['export: rendering every stage, then three PDFs', '']
+            ['export: rendering every scene, then three PDFs', '']
             + done[-30:]
             + ['', 'Q / Esc cancels']
         )

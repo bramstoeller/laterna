@@ -8,7 +8,7 @@ config.yaml.
 
 The defaults stay with the code that uses them (render.LOOK_DEFAULTS,
 dmx.DEFAULTS, ...): the models only say what may be set. load_config and
-parse_stages hand on the data as plain dicts, holding just the keys the
+parse_scenes hand on the data as plain dicts, holding just the keys the
 file sets (normalised: numbers as floats, `source: off` as 'off').
 """
 
@@ -207,7 +207,7 @@ class Mapping(Timing):
         return value
 
 
-class Stage(Timing):
+class Scene(Timing):
     name: str | None = None
     description: str | None = None
     mappings: list[Mapping] | None = None
@@ -219,9 +219,9 @@ class Stage(Timing):
     def contents(self):
         if self.blackout:
             if self.mappings or self.molding_color or self.fill_color:
-                raise ValueError('a blackout stage shows nothing: no mappings, no colours')
+                raise ValueError('a blackout scene shows nothing: no mappings, no colours')
         elif self.mappings is None:
-            raise ValueError('a stage needs mappings (or blackout: true)')
+            raise ValueError('a scene needs mappings (or blackout: true)')
         used = set()
         for m in self.mappings or []:
             for i in m.objects:
@@ -232,7 +232,7 @@ class Stage(Timing):
 
 
 class Fade(Node):
-    """A `- fade: <seconds>` entry between two stages."""
+    """A `- fade: <seconds>` entry between two scenes."""
 
     fade: NonNegative
 
@@ -241,15 +241,15 @@ def _entry_kind(entry):
     if isinstance(entry, dict) and 'fade' in entry and 'mappings' not in entry:
         if not entry.get('blackout'):
             return 'fade'
-    return 'stage'
+    return 'scene'
 
 
 class Scenes(Timing):
     description: str | None = None
     fade: NonNegative | None = None  # the older name of transition_time
-    stages: list[
+    scenes: list[
         Annotated[
-            Annotated[Stage, Tag('stage')] | Annotated[Fade, Tag('fade')],
+            Annotated[Scene, Tag('scene')] | Annotated[Fade, Tag('fade')],
             Discriminator(_entry_kind),
         ]
     ]
@@ -273,21 +273,21 @@ def _known_keys():
 
 
 def _where(loc, data, what):
-    """A readable place for an error: 'stage opening, mapping 2' rather
-    than stages.1.mappings.1."""
+    """A readable place for an error: 'scene opening, mapping 2' rather
+    than scenes.1.mappings.1."""
     parts, node = [], data
-    # drop the union's tags: stages.<n>.stage.<field> -> stages.<n>.<field>
+    # drop the union's tags: scenes.<n>.scene.<field> -> scenes.<n>.<field>
     loc = [
         p
         for i, p in enumerate(loc)
-        if not (i and isinstance(loc[i - 1], int) and p in ('stage', 'fade'))
+        if not (i and isinstance(loc[i - 1], int) and p in ('scene', 'fade'))
     ]
     for i, part in enumerate(loc):
         parent = loc[i - 1] if i else None
         if isinstance(part, int) and isinstance(node, list) and part < len(node):
             item = node[part]
             label = item.get('name') or item.get('id') if isinstance(item, dict) else None
-            kind = {'stages': 'stage', 'objects': 'object', 'mappings': 'mapping'}.get(parent)
+            kind = {'scenes': 'scene', 'objects': 'object', 'mappings': 'mapping'}.get(parent)
             if kind:
                 parts[-1] = f'{kind} {label if label is not None else part + 1},'
             else:
@@ -324,7 +324,7 @@ def check(model, data, what, context=None):
     except ValidationError as error:
         raise ValueError(explain(error, data, what)) from None
     # warnings off: the serializer cannot follow the callable discriminator
-    # of the stages list and warns, though it dumps each entry right
+    # of the scenes list and warns, though it dumps each entry right
     return parsed.model_dump(exclude_unset=True, warnings=False)
 
 
@@ -333,7 +333,11 @@ def check_config(data, what='config.yaml'):
 
 
 def check_scenes(data, ids, what='scenes.yaml'):
-    return check(Scenes, data if data is not None else {}, what, context={'ids': set(ids)})
+    data = data if data is not None else {}
+    if isinstance(data, dict) and 'stages' in data and 'scenes' not in data:
+        # the older name of the list (a scene was a stage)
+        data = {('scenes' if k == 'stages' else k): v for k, v in data.items()}
+    return check(Scenes, data, what, context={'ids': set(ids)})
 
 
 def write_json_schemas(folder='.'):
