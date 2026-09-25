@@ -390,7 +390,7 @@ def export_all(
             (out / old).unlink()  # the same document under another language's name
     paths = [out / name for name in names]
     progress(f'writing {paths[0].name}...')
-    firsts = documents.backup(paths[0], cfg, scenes, views)
+    documents.backup(paths[0], cfg, scenes, views)
     progress(f'writing {paths[1].name}...')
     documents.run_sheet(
         paths[1],
@@ -398,7 +398,6 @@ def export_all(
         scenes,
         fades,
         views,
-        firsts,
         crop_box(cfg),
         source,
         data.get('description'),

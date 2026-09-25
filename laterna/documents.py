@@ -1,14 +1,14 @@
 """The PDF documents of the export (laterna/export.py), with reportlab.
 
 Layout only: export.py renders the pictures and hands them in with the
-parsed config and scenes. Three documents:
+parsed config and scenes. Four documents:
 
   config_sheet  calibration, frame shapes, look, the pretend spot, DMX
                 and config.yaml itself (A4 landscape)
-  run_sheet     the operator's cue list: every scene numbered as play.py's
-                L label numbers it, how it is reached, what it does while
-                it stands, what is on each object, where it is in the
-                backup (A4 landscape)
+  run_sheet     the operator's cue list (cue sheet, draaiboek): every scene
+                numbered as play.py's L label numbers it, drawn plainly,
+                how it is reached and what is on each object (A4 landscape)
+  scenes_sheet  the scenes' values from scenes.yaml in a table
   backup        every scene full screen, one page per picture at the
                 canvas's aspect ratio, in show order (blackouts as black
                 pages, one page per distinct combination of slideshow
@@ -74,6 +74,11 @@ def mmss(seconds):
 
 def secs(seconds):
     return f'{num(seconds, 2)} s'
+
+
+def duration(seconds):
+    """A duration in seconds under a minute, else in minutes: 55 s, 3 m, 2.5 m."""
+    return secs(seconds) if seconds < 60 else f'{num(seconds / 60, 1)} m'
 
 
 def jpeg(image, max_width=None, quality=88):
@@ -285,31 +290,16 @@ def scene_facts(scenes, fades):
 
     entry: 'start' (shown when the show starts), 'key' (a step key) or
     'auto' (the previous scene's hold ran out); fade: the transition into
-    it; hold: seconds it stands before moving on by itself (None = waits);
-    since: (index of the scene the last key was pressed on, or None for
-    the start of the show; seconds from then until this scene is fully
-    in) for scenes reached by themselves."""
+    it; hold: seconds it stands before moving on by itself (None = waits)."""
     facts = []
     for i, st in enumerate(scenes):
         prev = scenes[i - 1] if i else None
         entry = 'start' if i == 0 else ('auto' if prev.get('hold') is not None else 'key')
-        fade = fades[i - 1] if i else 0.0
-        since = None
-        if entry == 'auto':
-            before = facts[-1]
-            if before['since']:
-                key, t = before['since']
-            elif before['entry'] == 'key':
-                key, t = i - 2, before['fade']  # the key pressed on the scene before it
-            else:
-                key, t = None, 0.0  # counted from the start of the show
-            since = (key, t + prev['hold'] + fade)
         facts.append(
             {
                 'entry': entry,
-                'fade': fade,
+                'fade': fades[i - 1] if i else 0.0,
                 'hold': st.get('hold'),
-                'since': since,
                 'last': i == len(scenes) - 1,
             }
         )
@@ -367,22 +357,37 @@ def _scene_kinds(scene):
     return [k for k in ('slideshow', 'video') if any(k in m for m in maps)]
 
 
-def _strip(doc, y, scenes, facts):
-    """All scenes as numbered cells across the page, black for a blackout,
-    with an icon for a slideshow or a video; the step into each is drawn in
-    the gap before it: a green line = on a key, blue = on a key or by the
-    desk (a blackout on either side, see play.py), an orange wedge = by
-    itself."""
+def desk_steps(cfg, scenes, facts):
+    """Per scene: whether the desk can take the show into it too (a key
+    step next to a blackout, see play.py), with a desk configured."""
+    if ((cfg.get('dmx') or {}).get('source') or 'off') == 'off':
+        return [False] * len(scenes)
+    return [
+        bool(j)
+        and facts[j]['entry'] == 'key'
+        and bool(scenes[j].get('blackout') or scenes[j - 1].get('blackout'))
+        for j in range(len(scenes))
+    ]
+
+
+def _strip(doc, y, scenes, facts, desk):
+    """All scenes as numbered cells across the page, a blackout framed in
+    black, with an icon for a slideshow or a video; the step into each is
+    drawn in the gap before it: a green line = on a key, blue = on a key or
+    by the desk (a blackout on either side, see play.py), an orange wedge =
+    by itself."""
     n = len(scenes)
     gap = 5 if n <= 40 else (3 if n <= 80 else 2)
     cell = (doc.w - 2 * M - gap * (n - 1)) / n
     for j in range(n):
         x = M + j * (cell + gap)
         dark = bool(scenes[j].get('blackout'))
-        doc.rect(x, y, cell, 14, fill=NIGHT if dark else STRIP_OFF)
+        if dark:  # a blackout: framed in black, no inked block
+            doc.rect(x + 0.6, y + 0.6, cell - 1.2, 12.8, fill=STRIP_OFF, stroke=NIGHT, lw=1.2)
+        else:
+            doc.rect(x, y, cell, 14, fill=STRIP_OFF)
         if j:  # the step into scene j
-            desk = dark or scenes[j - 1].get('blackout')
-            kind = 'auto' if facts[j]['entry'] == 'auto' else ('desk' if desk else 'key')
+            kind = 'auto' if facts[j]['entry'] == 'auto' else ('desk' if desk[j] else 'key')
             _step_mark(doc, x - gap / 2, y, kind, gap)
         if cell >= 11:
             doc.text(
@@ -391,7 +396,7 @@ def _strip(doc, y, scenes, facts):
                 str(j + 1),
                 6.5 if cell >= 15 else 5,
                 False,
-                PAPER if dark else INK,
+                INK,
                 'center',
             )
         if cell >= 30:
@@ -400,9 +405,9 @@ def _strip(doc, y, scenes, facts):
     return y + 14
 
 
-def _strip_legend(doc, x, y):
+def _strip_legend(doc, x, y, desk=True):
     """What the strip's marks mean, drawn as they are, on one line from x
-    (baseline y)."""
+    (baseline y); `desk` False leaves the desk's steps out (no desk)."""
     for mark, key in (
         ('key', 'legend.step_key'),
         ('desk', 'legend.step_desk'),
@@ -411,11 +416,13 @@ def _strip_legend(doc, x, y):
         ('slideshow', 'legend.slideshow'),
         ('video', 'legend.video'),
     ):
+        if mark == 'desk' and not desk:
+            continue
         if mark in ('key', 'desk', 'auto'):
             _step_mark(doc, x + 3, y - 10.5, mark, 5)
             x += 9
         elif mark == 'blackout':
-            doc.rect(x, y - 7, 10, 7, fill=NIGHT)
+            doc.rect(x + 0.5, y - 6.5, 9, 6, fill=STRIP_OFF, stroke=NIGHT, lw=1.2)
             x += 13
         else:
             _media_icon(doc, x, y - 5.5, mark, MUTED)
@@ -451,13 +458,13 @@ BLOCKS = [  # colour, i18n block.<name> and block.<name>_means, blocks drawn
 ]
 
 
-def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, description=None):
+def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=None):
     """The operator's cue list. views[i] = export.scene_views of scene i
-    (thumb None for a blackout); backup_pages[i] = first page of scene i
-    in the backup; description = the scenes file's own, and each scene's
-    `description` goes under its row."""
+    (thumb None for a blackout); description = the scenes file's own, and
+    each scene's `description` goes under its row."""
     i18n.use(cfg.get('language'))
     facts = scene_facts(scenes, fades)
+    desk = desk_steps(cfg, scenes, facts)
     n = len(scenes)
     show = show_name(cfg)
     doc = Doc(
@@ -479,8 +486,8 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
     def picture(i, k, x, y, w):
         h = w * aspect
         reader = thumb(i, k)
-        if reader is None:  # a blackout: light, not an inked black block
-            doc.rect(x, y, w, h, fill=PANEL, stroke=FAINT, lw=0.5)
+        if reader is None:  # a blackout: framed in black as in the strip, no inked block
+            doc.rect(x + 0.6, y + 0.6, w - 1.2, h - 1.2, fill=STRIP_OFF, stroke=NIGHT, lw=1.2)
             doc.text(
                 x + w / 2, y + h / 2 + 2, 'BLACKOUT', 5.5 if w < 80 else 7, True, MUTED, 'center'
             )
@@ -493,8 +500,8 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
     y = 44
     if description:
         y = doc.para(M, y + 4, description, 9, doc.w - 2 * M) + 2
-    y = _strip(doc, y, scenes, facts)
-    _strip_legend(doc, M, y + 13)
+    y = _strip(doc, y, scenes, facts, desk)
+    _strip_legend(doc, M, y + 13, any(desk))
 
     x2 = M + 380
     top = y + 42
@@ -538,22 +545,21 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
     split = len(objects) <= 4
     X_NUM, X_PIC, PIC_W = M, M + 24, 104
     X_NAME = X_PIC + PIC_W + 10
-    X_IN, X_STANDS = X_NAME + 150, X_NAME + 222
-    X_OBJ = X_STANDS + 118
-    X_BACKUP = doc.w - M - 30
-    obj_w = (X_BACKUP - X_OBJ - 6) / (len(objects) if split else 1)
+    X_IN = X_NAME + 150
+    X_OBJ = X_IN + 80
+    X_END = doc.w - M
+    obj_w = (X_END - X_OBJ - 6) / (len(objects) if split else 1)
     names = {o['id']: str(o.get('name', o['id'])) for o in objects}
 
     def head(first, last):
         _page_head(doc, tr('run.title'))
-        _strip(doc, 40, scenes, facts)
+        _strip(doc, 40, scenes, facts, desk)
         y = 72
         cols = [
             (X_NUM, '#'),
             (X_PIC, tr('col.picture')),
             (X_NAME, tr('run.scene')),
             (X_IN, tr('col.in')),
-            (X_STANDS, tr('col.stands')),
         ]
         if split:
             cols += [
@@ -561,23 +567,25 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
             ]
         else:
             cols += [(X_OBJ, tr('col.objects'))]
-        cols += [(X_BACKUP, tr('col.backup'))]
         for x, t in cols:
             doc.text(x, y, doc.fit(t.upper(), 6.5, 100, True), 6.5, True, MUTED)
         return y + 6
 
     def notes(i):
+        """The scene's description, wrapped to the scene column."""
         text = scenes[i].get('description')
-        return doc.wrap(' '.join(str(text).split()), 7.5, X_BACKUP - X_NAME) if text else []
+        return doc.wrap(' '.join(str(text).split()), 7, X_IN - X_NAME - 10) if text else []
+
+    def notes_top(i):
+        """Where the description starts, under the name."""
+        return 27
 
     def row_height(i):
-        h = PIC_W * aspect + 10
-        if notes(i):
-            h += len(notes(i)) * 9.5 + 2
+        h = max(PIC_W * aspect + 10, notes_top(i) + len(notes(i)) * 8.5)
         if len(views[i]) > 1:
-            per_line = int((X_BACKUP - X_NAME) // 76)
+            per_line = int((X_END - X_NAME) // 76)
             lines = math.ceil(len(views[i]) / per_line)
-            h += lines * (62 * aspect + 26) + 4
+            h += lines * (62 * aspect + 18) + 4
         if not split:
             h = max(h, 14 + 10 * len(objects))
         return h
@@ -607,45 +615,16 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
             doc.text(
                 X_NAME, y + 15, doc.fit(st.get('name', '?'), 9, X_IN - X_NAME - 8, True), 9, True
             )
-            yy = y + 27
-            if st.get('blackout'):
-                doc.text(X_NAME, yy, 'blackout', 7.5, color=MUTED)
             # in
             _, lc = ENTRY[f['entry']]
-            doc.label(X_IN, y + 7, tr(f'entry.{f["entry"]}'), lc)
+            label = tr(f'entry.{f["entry"]}')
+            if f['entry'] == 'auto':  # the time it comes after: the hold before + the fade
+                label += f' {duration(scenes[i - 1]["hold"] + f["fade"])}'
+            w = doc.label(X_IN, y + 7, label, lc)
+            if desk[i]:  # the desk can take this step too
+                doc.label(X_IN + w + 3, y + 7, 'DMX', DESK)
             if i:
                 doc.text(X_IN, y + 28, tr('run.fade', t=secs(f['fade'])), 7, color=MUTED)
-            if f['since']:
-                key = f['since'][0]
-                doc.text(X_IN, y + 38, tr('run.t_after', t=mmss(f['since'][1])), 7, color=MUTED)
-                doc.text(
-                    X_IN,
-                    y + 47,
-                    tr('run.the_start') if key is None else tr('run.the_key_on', k=key + 1),
-                    7,
-                    color=MUTED,
-                )
-            # stands
-            if f['last']:
-                stands = tr('run.last_scene')
-            elif f['hold'] is not None:
-                stands = tr('run.holds', t=secs(f['hold']))
-            else:
-                stands = tr('run.waits')
-            shows = [m for m in st.get('mappings', []) if 'slideshow' in m]
-            vids = [m for m in st.get('mappings', []) if 'video' in m]
-            for m in shows:
-                slot = m['hold'] + m['transition_time']
-                stands += tr(
-                    'run.slideshow',
-                    slot=mmss(slot),
-                    hold=secs(m['hold']),
-                    fade=secs(m['transition_time']),
-                    n=len(m['slideshow']),
-                )
-            if vids:
-                stands += tr('run.video')
-            doc.para(X_STANDS, y + 15, stands, 7.5, X_OBJ - X_STANDS - 8, lead=1.3)
             # objects
             now = object_contents(st, cfg)
             before = object_contents(scenes[i - 1], cfg) if i else {}
@@ -677,42 +656,23 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
                     doc.text(
                         X_OBJ,
                         y + 15 + k * 10,
-                        doc.fit(f'{o["id"]}: {t}', 7.5, X_BACKUP - X_OBJ - 6),
+                        doc.fit(f'{o["id"]}: {t}', 7.5, X_END - X_OBJ - 6),
                         7.5,
                         color=MUTED if before.get(o['id']) == (kind, t) else INK,
                     )
-            # backup page(s)
-            first = backup_pages[i]
-            last = first + len(views[i]) - 1
-            page = (
-                tr('run.page', p=first)
-                if last == first
-                else tr('run.pages', first=first, last=last)
-            )
-            doc.text(X_BACKUP, y + 15, page, 8)
-            # the scene's description, then the slideshow combinations
-            sy = y + PIC_W * aspect + 12
-            for line in notes(i):
-                doc.text(X_NAME, sy + 4, line, 7.5)
-                sy += 9.5
-            if notes(i):
-                sy += 2
+            # the scene's description under its name, then the slideshow combinations
+            for k, line in enumerate(notes(i)):
+                doc.text(X_NAME, y + notes_top(i) + k * 8.5, line, 7, color=MUTED)
+            sy = y + max(PIC_W * aspect + 12, notes_top(i) + len(notes(i)) * 8.5 + 2)
             if len(views[i]) > 1:
-                per_line = int((X_BACKUP - X_NAME) // 76)
+                per_line = int((X_END - X_NAME) // 76)
                 for k, v in enumerate(views[i]):
                     x = X_NAME + (k % per_line) * 76
-                    ty = sy + (k // per_line) * (62 * aspect + 26)
+                    ty = sy + (k // per_line) * (62 * aspect + 18)
                     th = picture(i, k, x, ty, 68)
                     changed = ', '.join(v['changed']) if v.get('changed') else ''
                     doc.text(
                         x, ty + th + 8, doc.fit(f'{k + 1}. {changed}', 6.2, 72, True), 6.2, True
-                    )
-                    doc.text(
-                        x,
-                        ty + th + 16,
-                        tr('run.on_entering') if k == 0 else tr('run.from', t=mmss(v['t'])),
-                        6.2,
-                        color=MUTED,
                     )
             y += h
         doc.line(M, y, doc.w - M, y)

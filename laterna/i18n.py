@@ -117,24 +117,20 @@ TEXTS = {
         'nl': 'Na Q of een herstart begint de show bij scène 1. Terug naar waar je was: druk een paar keer snel op het pijltje naar rechts; een tweede druk tijdens een fade slaat hem over. Het scènenummer staat in de eerste kolom van de cuelijst en in het L-label.',
     },
     'run.trouble_backup': {
-        'en': 'Last resort: backup.pdf holds every scene full screen in show order (column "backup" below gives the page). Open it full screen on the projector; no fades, no spots dimming with the desk.',
-        'nl': 'Laatste redmiddel: backup.pdf bevat elke scène schermvullend in showvolgorde (kolom "backup" hieronder geeft de pagina). Open hem schermvullend op de beamer; geen fades, geen spots die met de tafel dimmen.',
+        'en': 'Last resort: backup.pdf holds every scene full screen in show order. Open it full screen on the projector; no fades, no spots dimming with the desk.',
+        'nl': 'Laatste redmiddel: backup.pdf bevat elke scène schermvullend in showvolgorde. Open hem schermvullend op de beamer; geen fades, geen spots die met de tafel dimmen.',
     },
     'run.columns': {
         'en': 'Columns',
         'nl': 'Kolommen',
     },
     'run.columns_note': {
-        'en': 'IN: how the scene is reached and its fade. STANDS: what it does until the next step. t = seconds from the last key press until the scene is fully in. Grey text = the same as the scene before. A row of small pictures = the combinations of a slideshow, with the moment each comes up after entering.',
-        'nl': 'IN: hoe de scène bereikt wordt en haar fade. STAAT: wat ze doet tot de volgende stap. t = seconden van de laatste toets tot de scène helemaal in beeld is. Grijze tekst = hetzelfde als de scène ervoor. Een rij kleine beelden = de combinaties van een slideshow, met het moment waarop elk verschijnt na binnenkomst.',
+        'en': 'IN: how the scene is reached (AUTO: after how long) and its fade. Grey text = the same as the scene before. A row of small pictures = the combinations of a slideshow.',
+        'nl': 'IN: hoe de scène bereikt wordt (AUTO: na hoe lang) en haar fade. Grijze tekst = hetzelfde als de scène ervoor. Een rij kleine beelden = de combinaties van een slideshow.',
     },
     'col.picture': {
         'en': 'picture',
         'nl': 'beeld',
-    },
-    'col.stands': {
-        'en': 'stands',
-        'nl': 'staat',
     },
     'col.objects': {
         'en': 'objects',
@@ -143,38 +139,6 @@ TEXTS = {
     'entry.key': {
         'en': 'KEY',
         'nl': 'TOETS',
-    },
-    'run.t_after': {
-        'en': 't = {t} after',
-        'nl': 't = {t} na',
-    },
-    'run.the_start': {
-        'en': 'the start',
-        'nl': 'de start',
-    },
-    'run.the_key_on': {
-        'en': 'the key on #{k}',
-        'nl': 'de toets op #{k}',
-    },
-    'run.last_scene': {
-        'en': 'last scene: a step key does nothing',
-        'nl': 'laatste scène: een staptoets doet niets',
-    },
-    'run.holds': {
-        'en': 'holds {t}, then goes on by itself (a key goes earlier)',
-        'nl': 'staat {t}, gaat dan vanzelf door (een toets gaat eerder)',
-    },
-    'run.waits': {
-        'en': 'waits for a key',
-        'nl': 'wacht op een toets',
-    },
-    'run.slideshow': {
-        'en': '; slideshow: {slot} per picture ({hold} + fade {fade}), {n} pictures, loops',
-        'nl': '; slideshow: {slot} per beeld ({hold} + fade {fade}), {n} beelden, herhaalt',
-    },
-    'run.video': {
-        'en': '; video loops',
-        'nl': '; video herhaalt',
     },
     'run.all_black': {
         'en': 'all black',
@@ -195,14 +159,6 @@ TEXTS = {
     'run.stays': {
         'en': '(stays)',
         'nl': '(blijft)',
-    },
-    'run.on_entering': {
-        'en': 'on entering',
-        'nl': 'bij binnenkomst',
-    },
-    'run.from': {
-        'en': 'from {t}',
-        'nl': 'vanaf {t}',
     },
     'config.title': {
         'en': 'Configuration',
@@ -460,18 +416,6 @@ TEXTS = {
         'en': 'scene',
         'nl': 'scène',
     },
-    'run.fade': {
-        'en': 'fade {t}',
-        'nl': 'fade {t}',
-    },
-    'run.page': {
-        'en': 'p. {p}',
-        'nl': 'p. {p}',
-    },
-    'run.pages': {
-        'en': 'p. {first}-{last}',
-        'nl': 'p. {first}-{last}',
-    },
     'entry.start': {
         'en': 'START',
         'nl': 'START',
@@ -483,10 +427,6 @@ TEXTS = {
     'col.in': {
         'en': 'in',
         'nl': 'in',
-    },
-    'col.backup': {
-        'en': 'backup',
-        'nl': 'backup',
     },
     'spot.color': {
         'en': 'tint',
@@ -543,6 +483,10 @@ TEXTS = {
     'scenes.title': {
         'en': 'Scenes',
         'nl': 'Scènes',
+    },
+    'run.fade': {
+        'en': 'fade {t}',
+        'nl': 'fade {t}',
     },
 }
 
