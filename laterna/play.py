@@ -115,7 +115,7 @@ STATE_PITCH = 4  # block + gap
 STATE_FADE = ((128, 0, 0), (64, 0, 0))  # a transition runs
 STATE_HOLD = ((128, 64, 0), (64, 32, 0))  # a stage hold runs
 STATE_KEY = ((0, 128, 0), (0, 64, 0))  # waiting for a key
-STATE_DESK = ((0, 0, 64), (0, 0, 64))  # a blackout waits for the master to come up
+STATE_DESK = ((0, 0, 128), (0, 0, 128))  # a blackout waits for the master to come up
 STATE_CLIP = ((64, 64, 64), (64, 64, 64))  # the clips' own bars, left, flat grey
 BAR_TICK_MS = 250  # redraw interval during a hold (1 px of bar)
 BAR_LADDER = (1, 2, 3, 5, 10, 15, 20, 30)  # seconds per block, then whole minutes
@@ -523,7 +523,8 @@ def run(
         elif hold_until is not None:
             bar(0, STATE_HOLD, hold_until - now(), stages[idx].get('hold') or 0.0)
         else:
-            bar(0, STATE_DESK if master_dark and _is_blackout(stages[idx]) else STATE_KEY, 0.0)
+            waits_for_desk = master_dark and _is_blackout(stages[idx]) and idx + 1 < total
+            bar(0, STATE_DESK if waits_for_desk else STATE_KEY, 0.0)
         clips = clip_states(idx)  # the clips, top left, on one shared step
         if clips:
             unit = bar_unit(max(max(span, left) for _, left, span in clips), max_blocks)
@@ -587,8 +588,10 @@ def run(
         nonlocal master_dark
         if not desk.receiving:
             return
-        master_dark = desk.master() < DARK
+        was, master_dark = master_dark, desk.master() < DARK
         master_seen.add('down' if master_dark else 'up')
+        if master_dark != was:
+            show(idx)  # the state block changes colour
         if hold_until is not None or idx + 1 >= total:
             return
         here, after = _is_blackout(stages[idx]), _is_blackout(stages[idx + 1])
