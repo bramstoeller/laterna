@@ -479,16 +479,10 @@ def run_sheet(path, cfg, scenes, fades, views, backup_pages, crop_box, source, d
     def picture(i, k, x, y, w):
         h = w * aspect
         reader = thumb(i, k)
-        if reader is None:
-            doc.rect(x, y, w, h, fill=NIGHT)
+        if reader is None:  # a blackout: light, not an inked black block
+            doc.rect(x, y, w, h, fill=PANEL, stroke=FAINT, lw=0.5)
             doc.text(
-                x + w / 2,
-                y + h / 2 + 2,
-                'BLACKOUT',
-                5.5 if w < 80 else 7,
-                True,
-                (0.5, 0.48, 0.45),
-                'center',
+                x + w / 2, y + h / 2 + 2, 'BLACKOUT', 5.5 if w < 80 else 7, True, MUTED, 'center'
             )
         else:
             doc.image(reader, x, y, w, h)

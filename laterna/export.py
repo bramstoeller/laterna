@@ -42,7 +42,7 @@ import cv2
 import numpy as np
 import pygame
 
-from . import dmx, documents, render, ui, video
+from . import dmx, documents, frame, render, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_export'
@@ -124,10 +124,11 @@ def _stem(path):
 
 
 def _pictures(cfg, renderer, scene, first_only=False):
-    """[(t, picture names, RGB image)] of a scene as rendered (unlit), one
-    per distinct combination of slideshow pictures (only the first with
-    `first_only`), videos and video slides at their first frame; t =
-    seconds after entering, the names those of the slideshow pictures."""
+    """[(t, picture names, RGB image, slides)] of a scene as rendered
+    (unlit), one per distinct combination of slideshow pictures (only the
+    first with `first_only`), videos and video slides at their first
+    frame; t = seconds after entering, the names those of the slideshow
+    pictures, slides {id(mapping): the picture shown} of its slideshows."""
     lut = render.gamma_lut(cfg)
     base = renderer.render(scene)
     alpha = renderer.video_alpha(scene)
@@ -151,12 +152,13 @@ def _pictures(cfg, renderer, scene, first_only=False):
         flat = image.reshape(-1, 3)
         for spec, rows in fixed:
             flat[spec['flat']] = rows
-        names = []
+        names, slides = [], {}
         for (spec, m), k in zip(shows, combo):
             rows, _ = video._slide_rows(spec, k, 0.0, lut)  # a video slide: its first frame
             flat[spec['flat']] = rows
             names.append(_stem(m['slideshow'][k]))
-        out.append((t, names, image))
+            slides[id(m)] = k
+        out.append((t, names, image, slides))
         if first_only:
             break
     for spec, _ in shows:
@@ -164,6 +166,52 @@ def _pictures(cfg, renderer, scene, first_only=False):
             if isinstance(slide, dict) and slide['clip'].ok:
                 slide['clip'].cap.release()
     return out
+
+
+PLAIN_PAPER = (242, 241, 238)  # the cue sheet's pictures: around the frames
+
+
+def _source(cfg, path):
+    """A medium as an RGB float image: the picture, or a video's first
+    frame; None when it cannot be read."""
+    if render.is_video_path(path):
+        cap = cv2.VideoCapture(str(cfg['_dir'] / path))
+        ok, image = cap.read()
+        cap.release()
+        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32) if ok else None
+    try:
+        return render._load_image(cfg['_dir'] / path)
+    except FileNotFoundError:
+        return None
+
+
+def plain_view(cfg, scene, slides=None):
+    """A scene as a plain drawing for the cue sheet (canvas px, RGB uint8):
+    light paper, each frame a full arch (its rounded contour and round sight
+    edge) in the molding's colour, flat, and in it the picture as it is, or
+    the fill colour: no light at all (no spot, colour temperature, shading
+    or gamma). slides: {id(mapping): the slideshow picture shown}."""
+    w, h = cfg['canvas']
+    image = np.empty((h, w, 3), np.float32)
+    image[:] = PLAIN_PAPER
+    molding = np.float32(scene.get('molding_color', frame.COLOR))
+    fill = np.float32(scene.get('fill_color', frame.FILL))
+    for o in cfg['objects']:
+        outline = [render.world_to_px(p, cfg) for p in render.object_polygons_world(cfg, o)]
+        image[render._fill_mask((h, w), outline)] = molding
+        image[render._fill_mask((h, w), render.round_canvas_px(cfg, [o['id']]))] = fill
+    slides = slides or {}
+    for m in scene.get('mappings', []):
+        if 'slideshow' in m:
+            path = m['slideshow'][slides.get(id(m), 0)]
+        else:
+            path = m.get('image') or m.get('video')
+        source = _source(cfg, path)
+        if source is not None:
+            polys = render.round_canvas_px(cfg, m['objects'])
+            rect = render.canvas_rect_px(cfg, m.get('fit', m['objects']))
+            render.draw_source(image, source, m, polys, rect, cfg)
+    return np.clip(image + 0.5, 0, 255).astype(np.uint8)
 
 
 def scene_views(cfg, renderer, scene, gain, projector=None):
@@ -178,7 +226,7 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
     if scene.get('blackout'):
         return [{'full': None, 'thumb': None, 't': 0.0, 'changed': []}]
     views, before = [], None
-    for t, names, out in _pictures(cfg, renderer, scene):
+    for t, names, out, slides in _pictures(cfg, renderer, scene):
         changed = [n for j, n in enumerate(names) if before is None or before[j] != n]
         before = names
         image = lit(out, gain)
@@ -186,7 +234,7 @@ def scene_views(cfg, renderer, scene, gain, projector=None):
         ok, buf = cv2.imencode(
             '.jpg', cv2.cvtColor(full, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92]
         )
-        thumb = documents.crop(image, box)
+        thumb = documents.crop(plain_view(cfg, scene, slides), box)
         if thumb.shape[1] > THUMB_WIDTH:
             th = max(1, round(thumb.shape[0] * THUMB_WIDTH / thumb.shape[1]))
             thumb = cv2.resize(thumb, (THUMB_WIDTH, th), interpolation=cv2.INTER_AREA)
@@ -247,7 +295,7 @@ def config_renders(cfg, renderer, scenes, views, gain):
     example = _lightest(scenes, views)
 
     def picture():
-        return lit(_pictures(cfg, renderer, example, first_only=True)[0][2], gain)
+        return lit(_pictures(cfg, renderer, example, first_only=True)[0][2], gain)  # as in the show
 
     extras = {
         'look': copy.deepcopy(look),

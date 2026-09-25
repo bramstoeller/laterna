@@ -954,6 +954,12 @@ def _draw_mapping(canvas, mapping, polys_px, ref_rect, cfg, ss=1):
     except FileNotFoundError:
         print(f'warning: {mapping["image"]} missing, objects {mapping["objects"]} stay black')
         return
+    draw_source(canvas, source, mapping, polys_px, ref_rect, cfg, ss)
+
+
+def draw_source(canvas, source, mapping, polys_px, ref_rect, cfg, ss=1):
+    """Draw the RGB float image `source` as the medium of `mapping`: over
+    the mapping's rect (see mapping_rect), masked to the polygons."""
     h, w = canvas.shape[:2]
     mask = _fill_mask((h, w), polys_px)
     mmpp = float(cfg['scale_mm_per_px']) / ss
