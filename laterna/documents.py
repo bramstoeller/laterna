@@ -443,10 +443,10 @@ KEYS = [
     ('q', ['Q', 'Esc']),
 ]
 BLOCKS = [  # colour, i18n block.<name> and block.<name>_means, blocks drawn
-    (RED, 'red', 4),
-    (ORANGE, 'orange', 4),
     (GREEN, 'green', 1),
     (DESK, 'blue', 1),
+    (ORANGE, 'orange', 4),
+    (RED, 'red', 4),
     ((0.35, 0.35, 0.35), 'grey', 4),
 ]
 
