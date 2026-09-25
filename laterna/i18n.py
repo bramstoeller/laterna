@@ -477,8 +477,8 @@ TEXTS = {
         'nl': 'Scènes',
     },
     'run.fade': {
-        'en': 'fade {t}',
-        'nl': 'fade {t}',
+        'en': 'fade-out {t}',
+        'nl': 'fade-out {t}',
     },
     'col.next': {
         'en': 'next',
