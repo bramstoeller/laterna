@@ -31,7 +31,7 @@ from .balance_white import LUMA, to_linear, to_srgb
 
 TARGET = 0.11  # the common key: log-average luminance in linear light
 STRENGTH = 0.75  # fraction of the way to TARGET (in log space); 1 = all the way
-GAIN_MAX = 4.0  # highest gain in the shadows
+GAIN_MAX = 6.0  # highest gain in the shadows
 CLIPPED = 0.97  # luminance above which pixels are clipped and ignored
 DARK = 0.002  # luminance below which pixels are left out of the key
 EPS = 1e-6
