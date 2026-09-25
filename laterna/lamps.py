@@ -48,7 +48,9 @@ the light, so the bright patch goes first and the picture ends up lit
 evenly before it goes out. Without it a dimmed spot keeps a flat, over
 bright centre, which is what the light desk's master fader shows. A
 picture with `spot: false` has no pool to flatten: on its objects the
-light is even at every level (Lamps.light's `no_spot`).
+light is even at every level (Lamps.light's `no_spot`). In a fade
+between a scene with a spot on an object and one without, the two
+pictures are lit apart there and mixed after (the rest mixes first).
 """
 
 import functools
@@ -86,6 +88,13 @@ def lamp_gain(level, kelvin, white, amp):
     k = kelvin * linear**TUNGSTEN if linear > 0 else 1000.0
     tint = render.white_gain(min(max(k, 1000.0), 40000.0), white)
     return np.float32([level * t * a for t, a in zip(tint, amp)])
+
+
+def _picture(live, molding, rows, cols):
+    """A render's pictures alone in a band: the render less its molding."""
+    pic = live[rows, cols].astype(np.float32)
+    pic -= molding[rows, cols]
+    return np.maximum(pic, 0.0, out=pic)
 
 
 def spot_free(scene):
@@ -198,7 +207,7 @@ class Lamps:
             pic = live[rows, cols].astype(np.float32)
             mold = molding[rows, cols].astype(np.float32)
         else:
-            live_b, molding_b, t = fade
+            live_b, molding_b, t, no_spot_b = fade
             pic = cv2.addWeighted(
                 live[rows, cols], 1.0 - t, live_b[rows, cols], t, 0.0, dtype=cv2.CV_32F
             )
@@ -212,22 +221,38 @@ class Lamps:
         np.maximum(pic, 0.0, out=pic)
         acc = np.empty(pic.shape, np.float32)
         acc[:] = self.noise[rows, cols]
+        apart = None  # the two pictures alone, where they are lit apart
         for oid, local, inside in parts:
             if oid not in gains:
                 continue
             _, _, m, ratio_pic, ratio_mold = self.objects[oid]
-            if oid in no_spot:
-                ratio_pic = m  # an evenly lit picture: nothing to take out
             m = m[local]
-            for part, ratio, gain in (
-                (pic, ratio_pic, gains[oid][0]),
-                (mold, ratio_mold, gains[oid][1]),
-            ):
-                if gain is not None:
-                    g = ratio[local] * gain[0]
-                    g += m * gain[1]
-                    g *= part[inside]
-                    acc[inside] += g
+            gain = gains[oid][1]  # the molding
+            if gain is not None:
+                g = ratio_mold[local] * gain[0]
+                g += m * gain[1]
+                g *= mold[inside]
+                acc[inside] += g
+            gain = gains[oid][0]  # the picture; no spot: nothing to take out
+            if gain is None:
+                continue
+            ratio = m if oid in no_spot else ratio_pic[local]
+            if fade is None or (oid in no_spot) == (oid in no_spot_b):
+                g = ratio * gain[0]
+                g += m * gain[1]
+                g *= pic[inside]
+            else:  # one side has a spot here, the other not: light them apart
+                if apart is None:
+                    apart = (
+                        _picture(live, molding, rows, cols),
+                        _picture(live_b, molding_b, rows, cols),
+                    )
+                ratio_b = m if oid in no_spot_b else ratio_pic[local]
+                g = ratio * ((1.0 - t) * gain[0])
+                g *= apart[0][inside]
+                g += ratio_b * (t * gain[0]) * apart[1][inside]
+                g += m * gain[1] * pic[inside]
+            acc[inside] += g
         np.clip(acc, 0.0, 255.0, out=acc)
         self.out[rows, cols] = acc  # truncates: with the noise, a dithered rounding
 
@@ -235,9 +260,9 @@ class Lamps:
         """Draw `live` (the scene as rendered, videos composited: an RGB
         uint8 image (h, w, 3)) onto the surface `dst` under the lamps at
         `levels`; `molding` is the scene's molding-only render. `fade` =
-        (live, molding, t) of the scene being faded to, t running 0 -> 1:
-        the two are mixed before the light. `no_spot`: the objects whose
-        picture has no spot (spot_free), lit evenly as they dim."""
+        (live, molding, t, no_spot) of the scene being faded to, t running
+        0 -> 1: the two are mixed before the light. `no_spot`: the objects
+        whose picture has no spot (spot_free), lit evenly as they dim."""
         if fade is None and self.plain and levels.is_full(self.white):
             dst.blit(_as_surface(live), (0, 0))
             return

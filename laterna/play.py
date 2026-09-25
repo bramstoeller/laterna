@@ -309,7 +309,7 @@ def crossfade(
     getters are re-evaluated every tick, so videos keep playing (and start
     playing) during the fade; `levels` (called per tick) is what the desk
     asks; `no_spot` = the two scenes' objects without a spot
-    (lamps.spot_free), the one of the scene that shows most."""
+    (lamps.spot_free)."""
     if duration > 0:
         start = pygame.time.get_ticks()
         while True:
@@ -321,8 +321,8 @@ def crossfade(
                 get_src(),
                 mold_src,
                 levels(),
-                fade=(get_dst(), mold_dst, t),
-                no_spot=no_spot[t >= 0.5],
+                fade=(get_dst(), mold_dst, t, no_spot[1]),
+                no_spot=no_spot[0],
             )
             overlay()
             pygame.display.flip()
