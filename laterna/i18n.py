@@ -1,0 +1,570 @@
+"""The language of what laterna writes for people to read: config.yaml
+`language`, en (the default) or nl. Only the PDF export uses it so far
+(laterna/documents.py); the apps on screen stay in English.
+
+Every text has a key and is written out in every language right under
+it, so a missing translation shows at once; tr(key, **values) gives it
+in the current language, with the values filled in ({name} fields,
+str.format). At import every text is checked to have all languages with
+the same fields. The names from config.yaml (scale_mm_per_px, look,
+start: desk, ...) stay as they are, so they can be found in the file.
+"""
+
+import string
+
+LANGUAGES = ('en', 'nl')
+
+_language = 'en'
+
+
+def use(language):
+    """Write in `language` from now on (None: English)."""
+    global _language
+    if language not in (None, *LANGUAGES):
+        raise ValueError(f'language is one of {", ".join(LANGUAGES)}')
+    _language = language or 'en'
+
+
+def tr(key, **values):
+    """The text `key` in the current language, `values` filled in."""
+    text = TEXTS[key][_language]
+    return text.format(**values) if values else text
+
+
+TEXTS = {
+    'run.title': {
+        'en': 'Run sheet',
+        'nl': 'Draaiboek',
+    },
+    'run.footer': {
+        'en': '{show} · run sheet · {source} · generated {date}',
+        'nl': '{show} · draaiboek · {source} · gemaakt {date}',
+    },
+    'run.summary': {
+        'en': '{n} stages · {keys} on a key, {auto} by themselves · numbered like the H label of the presentation (stage k/{n})',
+        'nl': '{n} stages · {keys} op een toets, {auto} vanzelf · genummerd zoals het H-label van de voorstelling (stage k/{n})',
+    },
+    'run.strip_legend': {
+        'en': 'green = on a key, orange = comes by itself, black bar = blackout',
+        'nl': 'groen = op een toets, oranje = komt vanzelf, zwarte balk = blackout',
+    },
+    'run.keys': {
+        'en': 'Keys',
+        'nl': 'Toetsen',
+    },
+    'key.next': {
+        'en': 'Enter / space / right arrow',
+        'nl': 'Enter / spatie / pijl rechts',
+    },
+    'key.next_does': {
+        'en': 'next stage (fades)',
+        'nl': 'volgende stage (met fade)',
+    },
+    'key.back': {
+        'en': 'Backspace / left arrow',
+        'nl': 'Backspace / pijl links',
+    },
+    'key.back_does': {
+        'en': 'previous stage',
+        'nl': 'vorige stage',
+    },
+    'key.twice': {
+        'en': 'same key twice within 0.5 s',
+        'nl': 'dezelfde toets twee keer binnen 0,5 s',
+    },
+    'key.twice_does': {
+        'en': 'during a fade: cut it short and step on',
+        'nl': 'tijdens een fade: afbreken en doorgaan',
+    },
+    'key.slide': {
+        'en': '>  <   (also  .  ,)',
+        'nl': '>  <   (ook  .  ,)',
+    },
+    'key.slide_does': {
+        'en': 'inside a slideshow: picture on / back',
+        'nl': 'in een slideshow: beeld verder / terug',
+    },
+    'key.h_does': {
+        'en': 'stage label on/off (drawn in the projection itself)',
+        'nl': 'stagelabel aan/uit (in de projectie zelf getekend)',
+    },
+    'key.q_does': {
+        'en': 'stop, back to the menu',
+        'nl': 'stoppen, terug naar het menu',
+    },
+    'run.blocks': {
+        'en': 'State blocks, top right of the projection',
+        'nl': 'Statusblokjes, rechtsboven in de projectie',
+    },
+    'block.red': {
+        'en': 'red',
+        'nl': 'rood',
+    },
+    'block.orange': {
+        'en': 'orange',
+        'nl': 'oranje',
+    },
+    'block.green': {
+        'en': 'green',
+        'nl': 'groen',
+    },
+    'block.blue': {
+        'en': 'blue',
+        'nl': 'blauw',
+    },
+    'block.grey': {
+        'en': 'grey',
+        'nl': 'grijs',
+    },
+    'block.red_means': {
+        'en': 'a transition runs: one key press does nothing, two cut it short',
+        'nl': 'een overgang loopt: één toets doet niets, twee breken hem af',
+    },
+    'block.orange_means': {
+        'en': 'the stage holds: it moves on by itself, the blocks count down',
+        'nl': 'de stage heeft een hold: hij gaat vanzelf door, de blokjes tellen af',
+    },
+    'block.green_means': {
+        'en': 'waiting for a key',
+        'nl': 'wacht op een toets',
+    },
+    'block.blue_means': {
+        'en': "blackout with the desk's master at 0: the master coming up goes on to the next stage",
+        'nl': 'blackout met de master van de tafel op 0: de master omhoog gaat door naar de volgende stage',
+    },
+    'block.grey_means': {
+        'en': 'top left, one row per timing (shows in step share one): counts down hold + fade to the next picture / the restart',
+        'nl': 'linksboven, één rij per timing (gelijklopende shows delen er één): telt hold + fade af tot het volgende beeld / de herstart',
+    },
+    'run.trouble': {
+        'en': 'If something goes wrong',
+        'nl': 'Als er iets misgaat',
+    },
+    'run.trouble_restart': {
+        'en': 'After Q or a restart the show always begins at stage 1. To get back to where you were: press Enter, and during every fade press Enter again within half a second - the fade is skipped and the show steps straight on. The stage number is in the first column of the cue list and in the H label.',
+        'nl': 'Na Q of een herstart begint de show altijd bij stage 1. Terug naar waar je was: druk Enter, en druk tijdens elke fade binnen een halve seconde nog eens Enter - de fade wordt overgeslagen en de show gaat direct door. Het stagenummer staat in de eerste kolom van de cuelijst en in het H-label.',
+    },
+    'run.trouble_render': {
+        'en': 'The first start after a change of config or scenes renders the stages first (a progress line in the picture); after that they come from the cache.',
+        'nl': 'De eerste start na een wijziging van config of scenes rendert eerst de stages (een voortgangsregel in beeld); daarna komen ze uit de cache.',
+    },
+    'run.trouble_backup': {
+        'en': 'Last resort: backup.pdf holds every stage full screen in show order (column "backup" below gives the page). Open it full screen on the projector; no fades, no spots dimming with the desk.',
+        'nl': 'Laatste redmiddel: backup.pdf bevat elke stage schermvullend in showvolgorde (kolom "backup" hieronder geeft de pagina). Open hem schermvullend op de beamer; geen fades, geen spots die met de tafel dimmen.',
+    },
+    'run.columns': {
+        'en': 'Columns',
+        'nl': 'Kolommen',
+    },
+    'run.columns_note': {
+        'en': 'IN: how the stage is reached and its fade. STANDS: what it does until the next step. t = seconds from the last key press until the stage is fully in. Grey text = the same as the stage before. A row of small pictures = the combinations of a slideshow, with the moment each comes up after entering.',
+        'nl': 'IN: hoe de stage bereikt wordt en zijn fade. STAAT: wat hij doet tot de volgende stap. t = seconden van de laatste toets tot de stage helemaal in beeld is. Grijze tekst = hetzelfde als de stage ervoor. Een rij kleine beelden = de combinaties van een slideshow, met het moment waarop elk verschijnt na binnenkomst.',
+    },
+    'run.cue_list': {
+        'en': 'Cue list · stages {first}-{last} of {n}',
+        'nl': 'Cuelijst · stages {first}-{last} van {n}',
+    },
+    'col.picture': {
+        'en': 'picture',
+        'nl': 'beeld',
+    },
+    'col.stands': {
+        'en': 'stands',
+        'nl': 'staat',
+    },
+    'col.objects': {
+        'en': 'objects',
+        'nl': 'objecten',
+    },
+    'entry.key': {
+        'en': 'KEY',
+        'nl': 'TOETS',
+    },
+    'run.t_after': {
+        'en': 't = {t} after',
+        'nl': 't = {t} na',
+    },
+    'run.the_start': {
+        'en': 'the start',
+        'nl': 'de start',
+    },
+    'run.the_key_on': {
+        'en': 'the key on #{k}',
+        'nl': 'de toets op #{k}',
+    },
+    'run.last_stage': {
+        'en': 'last stage: a step key does nothing',
+        'nl': 'laatste stage: een staptoets doet niets',
+    },
+    'run.holds': {
+        'en': 'holds {t}, then goes on by itself (a key goes earlier)',
+        'nl': 'staat {t}, gaat dan vanzelf door (een toets gaat eerder)',
+    },
+    'run.waits': {
+        'en': 'waits for a key',
+        'nl': 'wacht op een toets',
+    },
+    'run.slideshow': {
+        'en': '; slideshow: {slot} per picture ({hold} + fade {fade}), {n} pictures, loops',
+        'nl': '; slideshow: {slot} per beeld ({hold} + fade {fade}), {n} beelden, herhaalt',
+    },
+    'run.video': {
+        'en': '; video loops',
+        'nl': '; video herhaalt',
+    },
+    'run.all_black': {
+        'en': 'all black',
+        'nl': 'alles zwart',
+    },
+    'run.black': {
+        'en': 'black',
+        'nl': 'zwart',
+    },
+    'run.fill': {
+        'en': 'fill',
+        'nl': 'vulling',
+    },
+    'run.slideshow_of': {
+        'en': 'slideshow of {n}',
+        'nl': 'slideshow van {n}',
+    },
+    'run.stays': {
+        'en': '(stays)',
+        'nl': '(blijft)',
+    },
+    'run.on_entering': {
+        'en': 'on entering',
+        'nl': 'bij binnenkomst',
+    },
+    'run.from': {
+        'en': 'from {t}',
+        'nl': 'vanaf {t}',
+    },
+    'config.title': {
+        'en': 'Configuration',
+        'nl': 'Configuratie',
+    },
+    'config.footer': {
+        'en': '{show} · configuration · {source} · generated {date}',
+        'nl': '{show} · configuratie · {source} · gemaakt {date}',
+    },
+    'config.setup': {
+        'en': 'Set-up and global calibration',
+        'nl': 'Opstelling en globale kalibratie',
+    },
+    'config.lens_foot': {
+        'en': 'lens foot point',
+        'nl': 'voetpunt lens',
+    },
+    'config.picture_width': {
+        'en': 'picture {mm} mm = {px} px',
+        'nl': 'beeld {mm} mm = {px} px',
+    },
+    'config.outer_edges': {
+        'en': 'outer edges {mm} mm',
+        'nl': 'buitenranden {mm} mm',
+    },
+    'config.setup_note': {
+        'en': 'Black = the whole projector picture on the frame plane at the set scale. Red dot = origin of an object (middle of its bottom plank). Light numbers between frames = the gap, wood to wood, in mm.',
+        'nl': 'Zwart = het hele beamerbeeld op het framevlak bij de ingestelde schaal. Rode stip = oorsprong van een object (midden van de onderplank). Lichte getallen tussen de lijsten = de tussenruimte, hout tot hout, in mm.',
+    },
+    'config.transformation': {
+        'en': 'Transformation: local (frame.inner, mm) x scale, rotated, + origin = world mm; then the global rotation, - image_offset, / scale_mm_per_px = projector pixels (x from the middle, y up from the bottom edge). The inner corners are local, so the global alignment (step 3) leaves the shape calibration (step 4) intact.',
+        'nl': 'Transformatie: lokaal (frame.inner, mm) x scale, gedraaid, + origin = wereld-mm; dan de globale rotatie, - image_offset, / scale_mm_per_px = beamerpixels (x vanaf het midden, y omhoog vanaf de onderrand). De binnenhoeken zijn lokaal, dus de globale uitlijning (stap 3) laat de vormkalibratie (stap 4) intact.',
+    },
+    'config.global': {
+        'en': 'Global',
+        'nl': 'Globaal',
+    },
+    'config.picture_on_plane': {
+        'en': 'picture on frame plane',
+        'nl': 'beeld op framevlak',
+    },
+    'unit.deg': {
+        'en': '{v} deg',
+        'nl': '{v} graden',
+    },
+    'config.projector': {
+        'en': 'Projector (parallax)',
+        'nl': 'Beamer (parallax)',
+    },
+    'unit.mm_off': {
+        'en': '{v} mm (0 = off)',
+        'nl': '{v} mm (0 = uit)',
+    },
+    'config.objects': {
+        'en': 'Objects',
+        'nl': 'Objecten',
+    },
+    'col.name': {
+        'en': 'name',
+        'nl': 'naam',
+    },
+    'col.wood_mm': {
+        'en': 'wood mm',
+        'nl': 'hout mm',
+    },
+    'config.wood_note': {
+        'en': 'Wood = outer contour of the frame (mitred, before the rounding).',
+        'nl': 'Hout = buitencontour van de lijst (verstek, vóór de afronding).',
+    },
+    'config.origin': {
+        'en': 'origin',
+        'nl': 'oorsprong',
+    },
+    'config.wood_size': {
+        'en': 'wood {v} mm',
+        'nl': 'hout {v} mm',
+    },
+    'config.canvas_size': {
+        'en': 'canvas {v} mm',
+        'nl': 'doek {v} mm',
+    },
+    'legend.wood': {
+        'en': 'wood (outer contour, mitred)',
+        'nl': 'hout (buitencontour, verstek)',
+    },
+    'legend.molding': {
+        'en': 'projected molding (rounded)',
+        'nl': 'geprojecteerde lijst (afgerond)',
+    },
+    'legend.canvas': {
+        'en': 'canvas = picture area',
+        'nl': 'doek = beeldvlak',
+    },
+    'legend.corner': {
+        'en': 'inner corner = calibration point',
+        'nl': 'binnenhoek = kalibratiepunt',
+    },
+    'config.placement': {
+        'en': 'Placement',
+        'nl': 'Plaatsing',
+    },
+    'config.corners': {
+        'en': 'Inner corners (frame.inner, local mm)',
+        'nl': 'Binnenhoeken (frame.inner, lokale mm)',
+    },
+    'col.projector_px': {
+        'en': 'projector px',
+        'nl': 'beamer-px',
+    },
+    'config.corners_note': {
+        'en': 'Edges of the inner polygon: {lo} to {hi} mm, {n} corners. In step 4 (page corners) < > selects a corner, the arrows move it 1 mm (Shift 10).',
+        'nl': 'Zijden van de binnenpolygoon: {lo} tot {hi} mm, {n} hoeken. In stap 4 (pagina corners) kiest < > een hoek, de pijlen verschuiven hem 1 mm (Shift 10).',
+    },
+    'config.molding': {
+        'en': 'Molding and light',
+        'nl': 'Lijst en licht',
+    },
+    'config.molding_note': {
+        'en': 'Render without pictures (the fill) at full light, top of the largest frame: the profile, the fixed light direction and the shadow the molding throws on the canvas.',
+        'nl': 'Render zonder beelden (de vulling) bij vol licht, bovenkant van de grootste lijst: het profiel, de vaste lichtrichting en de schaduw die de lijst op het doek werpt.',
+    },
+    'config.headroom_note': {
+        'en': 'Brightness above 1 asks for more light than the projector has, so the render is stored {h} x darker and the lamps give that back: the clipping comes after the dimming, and a dimmed spot keeps its gradient. At full light the picture is the same.',
+        'nl': 'Helderheid boven 1 vraagt meer licht dan de beamer heeft, dus de render wordt {h} x donkerder opgeslagen en de lampen geven dat terug: het afkappen komt na het dimmen, en een gedimde spot houdt zijn verloop. Bij vol licht is het beeld hetzelfde.',
+    },
+    'look.molding': {
+        'en': 'brightness of the molding',
+        'nl': 'helderheid van de lijst',
+    },
+    'look.fill': {
+        'en': 'brightness of the fill (no picture)',
+        'nl': 'helderheid van de vulling (geen beeld)',
+    },
+    'look.images': {
+        'en': 'brightness of pictures and video',
+        'nl': 'helderheid van beelden en video',
+    },
+    'look.temperature': {
+        'en': 'colour of the light (K)',
+        'nl': 'kleur van het licht (K)',
+    },
+    'look.white': {
+        'en': "the projector's white (K)",
+        'nl': 'het wit van de beamer (K)',
+    },
+    'look.spot_collapse': {
+        'en': 'spot flattens as the light dims (0 = off)',
+        'nl': 'spot vlakt af als het licht dimt (0 = uit)',
+    },
+    'look.plank_depth': {
+        'en': 'parallax strip, mm (0 = off)',
+        'nl': 'parallaxstrook, mm (0 = uit)',
+    },
+    'spot.type': {
+        'en': 'cone (lamp in front) or gaussian (soft pool)',
+        'nl': 'cone (lamp ervoor) of gaussian (zachte vlek)',
+    },
+    'spot.strength': {
+        'en': 'dark edge = 1 - strength',
+        'nl': 'donkere rand = 1 - strength',
+    },
+    'spot.position': {
+        'en': 'lamp / centre, fraction of the frame (y 0 = bottom)',
+        'nl': 'lamp / midden, deel van de lijst (y 0 = onder)',
+    },
+    'spot.aim': {
+        'en': 'cone: where the axis hits',
+        'nl': 'cone: waar de as raakt',
+    },
+    'spot.distance': {
+        'en': 'cone: lamp in front, x frame width',
+        'nl': 'cone: lamp ervoor, x lijstbreedte',
+    },
+    'spot.angle': {
+        'en': 'cone: half opening angle',
+        'nl': 'cone: halve openingshoek',
+    },
+    'spot.softness': {
+        'en': 'cone: penumbra, x angle',
+        'nl': 'cone: halfschaduw, x hoek',
+    },
+    'spot.falloff': {
+        'en': 'cone: distance falloff exponent',
+        'nl': 'cone: exponent van de afname met de afstand',
+    },
+    'spot.size': {
+        'en': 'gaussian: sigma, x frame size',
+        'nl': 'gaussian: sigma, x lijstgrootte',
+    },
+    'spot.images': {
+        'en': 'x strength on pictures',
+        'nl': 'x strength op beelden',
+    },
+    'spot.fill': {
+        'en': 'x strength on the fill',
+        'nl': 'x strength op de vulling',
+    },
+    'config.spot': {
+        'en': 'The pretend spot: how the light falls',
+        'nl': 'De nagebootste spot: hoe het licht valt',
+    },
+    'config.with_spot': {
+        'en': 'with the spot, as set',
+        'nl': 'met de spot, zoals ingesteld',
+    },
+    'config.spot_map': {
+        'en': 'spot strength on the picture (false colour)',
+        'nl': 'spotsterkte op het beeld (valse kleuren)',
+    },
+    'config.without_spot': {
+        'en': 'without the spot (strength 0)',
+        'nl': 'zonder de spot (strength 0)',
+    },
+    'config.spot_note': {
+        'en': 'Every canvas white, no pictures: only the light. Each frame gets its own spot, placed relative to its own outline, so all frames get the same fan of light.',
+        'nl': 'Elk doek wit, geen beelden: alleen het licht. Elke lijst krijgt zijn eigen spot, geplaatst ten opzichte van zijn eigen omtrek, dus alle lijsten krijgen dezelfde lichtwaaier.',
+    },
+    'config.spot_table': {
+        'en': 'spot (picture and fill)',
+        'nl': 'spot (beeld en vulling)',
+    },
+    'config.stage_spot': {
+        'en': 'The spot on a stage: {name}',
+        'nl': 'De spot op een stage: {name}',
+    },
+    'config.with_spot_show': {
+        'en': 'with the spot, as in the show',
+        'nl': 'met de spot, zoals in de show',
+    },
+    'config.stage_spot_note': {
+        'en': "The spot brightens each frame around its aim point and lets the edges fall back to {edge}, so the frames look lit by the theatre light. As the desk dims the light the pool flattens first (spot_collapse {collapse}); at full light nothing changes. The colour comes from look.temperature ({kelvin} K) or the desk's cct channel.",
+        'nl': 'De spot maakt elke lijst lichter rond zijn richtpunt en laat de randen terugvallen naar {edge}, zodat de lijsten door het theaterlicht verlicht lijken. Als de tafel het licht dimt, vlakt de vlek eerst af (spot_collapse {collapse}); bij vol licht verandert er niets. De kleur komt van look.temperature ({kelvin} K) of het cct-kanaal van de tafel.',
+    },
+    'config.dmx_input': {
+        'en': 'Input',
+        'nl': 'Ingang',
+    },
+    'config.dmx_channels': {
+        'en': 'Channels',
+        'nl': 'Kanalen',
+    },
+    'col.dmx_channel': {
+        'en': 'DMX channel',
+        'nl': 'DMX-kanaal',
+    },
+    'col.function': {
+        'en': 'function',
+        'nl': 'functie',
+    },
+    'config.dmx_note': {
+        'en': 'Channel = address + offset - 1. Objects sharing a channel dim together. cct: 128 = look.temperature, 0-128 from the warm end, 128-255 to the cool end (dmx.cct). start full: a channel is full (cct 128) until the desk changes its value; start desk: the desk rules from its first frame. smooth: time constants up / down in seconds.',
+        'nl': 'Kanaal = address + offset - 1. Objecten op één kanaal dimmen samen. cct: 128 = look.temperature, 0-128 vanaf het warme eind, 128-255 naar het koele eind (dmx.cct). start full: een kanaal is vol (cct 128) tot de tafel zijn waarde verandert; start desk: de tafel bepaalt vanaf zijn eerste frame. smooth: tijdconstanten op / neer in seconden.',
+    },
+    'config.appendix': {
+        'en': 'Appendix: config.yaml',
+        'nl': 'Bijlage: config.yaml',
+    },
+    'config.continued': {
+        'en': ' (continued)',
+        'nl': ' (vervolg)',
+    },
+    'run.stage': {
+        'en': 'stage',
+        'nl': 'stage',
+    },
+    'run.fade': {
+        'en': 'fade {t}',
+        'nl': 'fade {t}',
+    },
+    'run.page': {
+        'en': 'p. {p}',
+        'nl': 'p. {p}',
+    },
+    'run.pages': {
+        'en': 'p. {first}-{last}',
+        'nl': 'p. {first}-{last}',
+    },
+    'entry.start': {
+        'en': 'START',
+        'nl': 'START',
+    },
+    'entry.auto': {
+        'en': 'AUTO',
+        'nl': 'AUTO',
+    },
+    'key.h': {
+        'en': 'H',
+        'nl': 'H',
+    },
+    'key.q': {
+        'en': 'Q / Esc',
+        'nl': 'Q / Esc',
+    },
+    'col.in': {
+        'en': 'in',
+        'nl': 'in',
+    },
+    'col.backup': {
+        'en': 'backup',
+        'nl': 'backup',
+    },
+    'spot.color': {
+        'en': 'tint',
+        'nl': 'tint',
+    },
+    'run.video_of': {
+        'en': 'video {name}',
+        'nl': 'video {name}',
+    },
+    'backup.title': {
+        'en': 'Backup',
+        'nl': 'Backup',
+    },
+    'config.object': {
+        'en': 'Object {id} · {name}',
+        'nl': 'Object {id} · {name}',
+    },
+}
+
+
+def _fields(text):
+    return {name for _, name, _, _ in string.Formatter().parse(text) if name}
+
+
+for _key, _text in TEXTS.items():
+    if set(_text) != set(LANGUAGES):
+        raise ValueError(f'i18n {_key}: needs {", ".join(LANGUAGES)}, has {", ".join(_text)}')
+    if len({frozenset(_fields(t)) for t in _text.values()}) > 1:
+        raise ValueError(f'i18n {_key}: the languages have different {{fields}}')

@@ -31,6 +31,9 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
 
+from . import i18n
+from .i18n import tr
+
 A4_LANDSCAPE = landscape(A4)
 M = 36  # page margin
 
@@ -43,7 +46,6 @@ PANEL = (0.96, 0.95, 0.92)
 GREEN = (0.24, 0.48, 0.24)
 ORANGE = (0.75, 0.48, 0.10)
 RED = (0.75, 0.22, 0.17)
-BLUE = (0.20, 0.30, 0.75)
 BLUE = (0.18, 0.40, 0.56)
 NIGHT = (0.04, 0.04, 0.04)
 WOOD = (0.16, 0.12, 0.08)
@@ -300,17 +302,18 @@ def _media_label(m):
     name = (m.get('image') or m.get('video') or '').replace('\\', '/').split('/')[-1]
     stem = name.rsplit('.', 1)[0]
     if 'video' in m:
-        return f'video {stem}'
+        return 'video', tr('run.video_of', name=stem)
     if 'slideshow' in m:
-        return f'slideshow of {len(m["slideshow"])}'
-    return stem
+        return 'slideshow', tr('run.slideshow_of', n=len(m['slideshow']))
+    return 'image', stem
 
 
 def object_contents(stage, cfg):
-    """{object id: text} of what a stage shows on each object."""
+    """{object id: (kind, text)} of what a stage shows on each object;
+    kind is black, fill, image, video or slideshow."""
     if stage.get('blackout'):
-        return {o['id']: 'black' for o in cfg['objects']}
-    out = {o['id']: 'fill' for o in cfg['objects']}
+        return {o['id']: ('black', tr('run.black')) for o in cfg['objects']}
+    out = {o['id']: ('fill', tr('run.fill')) for o in cfg['objects']}
     for m in stage.get('mappings', []):
         for oid in m['objects']:
             out[oid] = _media_label(m)
@@ -354,31 +357,13 @@ def _page_head(doc, title, subtitle):
     doc.text(doc.w - M, 30, subtitle, 8, color=MUTED, align='right')
 
 
-KEYS = [
-    ('Enter / space / right arrow', 'next stage (fades)'),
-    ('Backspace / left arrow', 'previous stage'),
-    ('same key twice within 0.5 s', 'during a fade: cut it short and step on'),
-    ('>  <   (also  .  ,)', 'inside a slideshow: picture on / back'),
-    ('H', 'stage label on/off (drawn in the projection itself)'),
-    ('Q / Esc', 'stop, back to the menu'),
-]
-BLOCKS = [
-    (RED, 'red', 4, 'a transition runs: one key press does nothing, two cut it short'),
-    (ORANGE, 'orange', 4, 'the stage holds: it moves on by itself, the blocks count down'),
-    (GREEN, 'green', 1, 'waiting for a key'),
-    (
-        BLUE,
-        'blue',
-        1,
-        "blackout with the desk's master at 0: the master coming up goes on to the next stage",
-    ),
-    (
-        (0.35, 0.35, 0.35),
-        'grey',
-        4,
-        'top left, one row per timing (shows in step share one): counts down hold + fade '
-        'to the next picture / the restart',
-    ),
+KEYS = ['next', 'back', 'twice', 'slide', 'h', 'q']  # i18n key.<k> and key.<k>_does
+BLOCKS = [  # colour, i18n block.<name> and block.<name>_means, blocks drawn
+    (RED, 'red', 4),
+    (ORANGE, 'orange', 4),
+    (GREEN, 'green', 1),
+    (BLUE, 'blue', 1),
+    ((0.35, 0.35, 0.35), 'grey', 4),
 ]
 
 
@@ -387,10 +372,16 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
     (thumb None for a blackout); backup_pages[i] = first page of stage i
     in the backup; description = the scenes file's own, and each stage's
     `description` goes under its row."""
+    i18n.use(cfg.get('language'))
     facts = stage_facts(stages, fades)
     n = len(stages)
     show = show_name(cfg)
-    doc = Doc(path, 'Run sheet', f'{show} · run sheet · {source} · generated {today()}', show=show)
+    doc = Doc(
+        path,
+        tr('run.title'),
+        tr('run.footer', show=show, source=source, date=today()),
+        show=show,
+    )
     thumbs = {}
 
     def thumb(i, k):
@@ -420,14 +411,13 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
         return h
 
     # --- cover ------------------------------------------------------------
-    _page_head(doc, 'Run sheet', source)
-    doc.text(M, 84, 'Run sheet', 28, True)
+    _page_head(doc, tr('run.title'), source)
+    doc.text(M, 84, tr('run.title'), 28, True)
     keys = sum(f['entry'] == 'key' for f in facts)
     doc.text(
         M,
         104,
-        f'{n} stages · {keys} on a key, {n - keys - 1} by themselves · '
-        f'numbered like the H label of the presentation (stage k/{n})',
+        tr('run.summary', n=n, keys=keys, auto=n - keys - 1),
         10,
         color=MUTED,
     )
@@ -438,21 +428,21 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
     doc.text(
         M,
         y + 11,
-        'green = on a key, orange = comes by itself, black bar = blackout',
+        tr('run.strip_legend'),
         7,
         color=MUTED,
     )
 
     x2 = M + 380
     top = y + 42
-    y = doc.section(M, top, 'Keys')
-    for k, v in KEYS:
+    y = doc.section(M, top, tr('run.keys'))
+    for k in KEYS:
         doc.rect(M, y - 9, 150, 13, fill=PANEL, r=2)
-        doc.text(M + 5, y, k, 8, True)
-        doc.text(M + 158, y, v, 8)
+        doc.text(M + 5, y, tr(f'key.{k}'), 8, True)
+        doc.text(M + 158, y, tr(f'key.{k}_does'), 8)
         y += 16
-    y = doc.section(M, y + 10, 'State blocks, top right of the projection')
-    for col, name, count, text in BLOCKS:
+    y = doc.section(M, y + 10, tr('run.blocks'))
+    for col, name, count in BLOCKS:
         for b in range(count):
             corner = b == (0 if name == 'grey' else count - 1)
             bx = M + b * 6 + (18 if count == 1 else 0)
@@ -463,46 +453,18 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
                 4,
                 fill=col if corner or name == 'grey' else tuple(c * 0.5 for c in col),
             )
-        doc.text(M + 30, y - 3, name, 8, True)
-        y = doc.para(M + 68, y - 3, text, 8, x2 - M - 88) + 3
+        doc.text(M + 30, y - 3, tr(f'block.{name}'), 8, True)
+        y = doc.para(M + 68, y - 3, tr(f'block.{name}_means'), 8, x2 - M - 88) + 3
 
-    y = doc.section(x2, top, 'If something goes wrong')
-    y = doc.para(
-        x2,
-        y,
-        'After Q or a restart the show always begins at stage 1. To get back to '
-        'where you were: press Enter, and during every fade press Enter again within '
-        'half a second - the fade is skipped and the show steps straight on. The stage '
-        'number is in the first column of the cue list and in the H label.',
-        8.5,
-        doc.w - M - x2,
-    )
-    y = doc.para(
-        x2,
-        y + 4,
-        'The first start after a change of config or scenes renders the '
-        'stages first (a progress line in the picture); after that they come from the '
-        'cache.',
-        8.5,
-        doc.w - M - x2,
-    )
-    y = doc.para(
-        x2,
-        y + 4,
-        'Last resort: backup.pdf holds every stage full screen in show order '
-        '(column "backup" below gives the page). Open it full screen on the projector; '
-        'no fades, no spots dimming with the desk.',
-        8.5,
-        doc.w - M - x2,
-    )
-    y = doc.section(x2, y + 12, 'Columns')
+    y = doc.section(x2, top, tr('run.trouble'))
+    y = doc.para(x2, y, tr('run.trouble_restart'), 8.5, doc.w - M - x2)
+    y = doc.para(x2, y + 4, tr('run.trouble_render'), 8.5, doc.w - M - x2)
+    y = doc.para(x2, y + 4, tr('run.trouble_backup'), 8.5, doc.w - M - x2)
+    y = doc.section(x2, y + 12, tr('run.columns'))
     doc.para(
         x2,
         y,
-        'IN: how the stage is reached and its fade. STANDS: what it does until the '
-        'next step. t = seconds from the last key press until the stage is fully in. '
-        'Grey text = the same as the stage before. A row of small pictures = the '
-        'combinations of a slideshow, with the moment each comes up after entering.',
+        tr('run.columns_note'),
         8,
         doc.w - M - x2,
         color=MUTED,
@@ -520,24 +482,24 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
     names = {o['id']: str(o.get('name', o['id'])) for o in objects}
 
     def head(first, last):
-        _page_head(doc, 'Run sheet', source)
+        _page_head(doc, tr('run.title'), source)
         _strip(doc, 40, stages, facts, highlight=range(first, last + 1))
-        doc.text(M, 80, f'Cue list · stages {first + 1}-{last + 1} of {n}', 14, True)
+        doc.text(M, 80, tr('run.cue_list', first=first + 1, last=last + 1, n=n), 14, True)
         y = 98
         cols = [
             (X_NUM, '#'),
-            (X_PIC, 'picture'),
-            (X_NAME, 'stage'),
-            (X_IN, 'in'),
-            (X_STANDS, 'stands'),
+            (X_PIC, tr('col.picture')),
+            (X_NAME, tr('run.stage')),
+            (X_IN, tr('col.in')),
+            (X_STANDS, tr('col.stands')),
         ]
         if split:
             cols += [
                 (X_OBJ + k * obj_w, f'{o["id"]} {names[o["id"]]}') for k, o in enumerate(objects)
             ]
         else:
-            cols += [(X_OBJ, 'objects')]
-        cols += [(X_BACKUP, 'backup')]
+            cols += [(X_OBJ, tr('col.objects'))]
+        cols += [(X_BACKUP, tr('col.backup'))]
         for x, t in cols:
             doc.text(x, y, doc.fit(t.upper(), 6.5, 100, True), 6.5, True, MUTED)
         return y + 6
@@ -587,74 +549,85 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
             if st.get('blackout'):
                 doc.text(X_NAME, yy, 'blackout', 7.5, color=MUTED)
             # in
-            label, lc = ENTRY[f['entry']]
-            doc.label(X_IN, y + 7, label, lc)
+            _, lc = ENTRY[f['entry']]
+            doc.label(X_IN, y + 7, tr(f'entry.{f["entry"]}'), lc)
             if i:
-                doc.text(X_IN, y + 28, f'fade {secs(f["fade"])}', 7, color=MUTED)
+                doc.text(X_IN, y + 28, tr('run.fade', t=secs(f['fade'])), 7, color=MUTED)
             if f['since']:
                 key = f['since'][0]
-                doc.text(X_IN, y + 38, f't = {mmss(f["since"][1])} after', 7, color=MUTED)
+                doc.text(X_IN, y + 38, tr('run.t_after', t=mmss(f['since'][1])), 7, color=MUTED)
                 doc.text(
                     X_IN,
                     y + 47,
-                    'the start' if key is None else f'the key on #{key + 1}',
+                    tr('run.the_start') if key is None else tr('run.the_key_on', k=key + 1),
                     7,
                     color=MUTED,
                 )
             # stands
             if f['last']:
-                stands = 'last stage: a step key does nothing'
+                stands = tr('run.last_stage')
             elif f['hold'] is not None:
-                stands = f'holds {secs(f["hold"])}, then goes on by itself (a key goes earlier)'
+                stands = tr('run.holds', t=secs(f['hold']))
             else:
-                stands = 'waits for a key'
+                stands = tr('run.waits')
             shows = [m for m in st.get('mappings', []) if 'slideshow' in m]
             vids = [m for m in st.get('mappings', []) if 'video' in m]
             for m in shows:
                 slot = m['hold'] + m['transition_time']
-                stands += (
-                    f'; slideshow: {mmss(slot)} per picture ({secs(m["hold"])} + fade '
-                    f'{secs(m["transition_time"])}), {len(m["slideshow"])} pictures, loops'
+                stands += tr(
+                    'run.slideshow',
+                    slot=mmss(slot),
+                    hold=secs(m['hold']),
+                    fade=secs(m['transition_time']),
+                    n=len(m['slideshow']),
                 )
             if vids:
-                stands += '; video loops'
+                stands += tr('run.video')
             doc.para(X_STANDS, y + 15, stands, 7.5, X_OBJ - X_STANDS - 8, lead=1.3)
             # objects
             now = object_contents(st, cfg)
             before = object_contents(stages[i - 1], cfg) if i else {}
             if st.get('blackout'):
-                doc.text(X_OBJ, y + 15, 'all black', 8, color=MUTED)
+                doc.text(X_OBJ, y + 15, tr('run.all_black'), 8, color=MUTED)
             elif split:
                 for k, o in enumerate(objects):
-                    t = now[o['id']]
-                    same = before.get(o['id']) == t and not t.startswith('slideshow')
+                    kind, t = now[o['id']]
+                    slides = kind == 'slideshow'
+                    same = before.get(o['id']) == (kind, t) and not slides
                     x = X_OBJ + k * obj_w
-                    lines = doc.wrap(t.replace('-', ' '), 7.5, obj_w - 6, t.startswith('slideshow'))
+                    lines = doc.wrap(t.replace('-', ' '), 7.5, obj_w - 6, slides)
                     for li, line in enumerate(lines[:3]):
                         doc.text(
                             x,
                             y + 15 + li * 9.5,
                             line,
                             7.5,
-                            t.startswith('slideshow'),
-                            MUTED if same or t == 'fill' else INK,
+                            slides,
+                            MUTED if same or kind == 'fill' else INK,
                         )
                     if same:
-                        doc.text(x, y + 15 + min(len(lines), 3) * 9.5, '(stays)', 6.5, color=MUTED)
+                        doc.text(
+                            x, y + 15 + min(len(lines), 3) * 9.5, tr('run.stays'), 6.5, color=MUTED
+                        )
             else:
                 for k, o in enumerate(objects):
-                    t = now[o['id']]
+                    kind, t = now[o['id']]
                     doc.text(
                         X_OBJ,
                         y + 15 + k * 10,
                         doc.fit(f'{o["id"]}: {t}', 7.5, X_BACKUP - X_OBJ - 6),
                         7.5,
-                        color=MUTED if before.get(o['id']) == t else INK,
+                        color=MUTED if before.get(o['id']) == (kind, t) else INK,
                     )
             # backup page(s)
             first = backup_pages[i]
             last = first + len(views[i]) - 1
-            doc.text(X_BACKUP, y + 15, f'p. {first}' if last == first else f'p. {first}-{last}', 8)
+            page = (
+                tr('run.page', p=first)
+                if last == first
+                else tr('run.pages', first=first, last=last)
+            )
+            doc.text(X_BACKUP, y + 15, page, 8)
             # the stage's description, then the slideshow combinations
             sy = y + PIC_W * aspect + 12
             for line in notes(i):
@@ -675,7 +648,7 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
                     doc.text(
                         x,
                         ty + th + 16,
-                        'on entering' if k == 0 else f'from {mmss(v["t"])}',
+                        tr('run.on_entering') if k == 0 else tr('run.from', t=mmss(v['t'])),
                         6.2,
                         color=MUTED,
                     )
@@ -687,9 +660,10 @@ def run_sheet(path, cfg, stages, fades, views, backup_pages, crop_box, source, d
 def backup(path, cfg, stages, views):
     """Every picture full screen, at the canvas's aspect ratio. Returns the
     first page number of every stage."""
+    i18n.use(cfg.get('language'))
     w, h = cfg['canvas']
     size = (w * 0.5, h * 0.5)  # 960 x 600 pt at 1920 x 1200: the pixels at 144 dpi
-    doc = Doc(path, 'Backup', pagesize=size, show=show_name(cfg))
+    doc = Doc(path, tr('backup.title'), pagesize=size, show=show_name(cfg))
     firsts = []
     n = len(stages)
     for i, st in enumerate(stages):
@@ -778,38 +752,35 @@ def _value(v):
     return str(v)
 
 
-LOOK_NOTES = {
-    'molding': 'brightness of the molding',
-    'fill': 'brightness of the fill (no picture)',
-    'images': 'brightness of pictures and video',
-    'temperature': 'colour of the light (K)',
-    'white': "the projector's white (K)",
-    'spot_collapse': 'spot flattens as the light dims (0 = off)',
-    'plank_depth': 'parallax strip, mm (0 = off)',
-}
-SPOT_NOTES = {
-    'type': 'cone (lamp in front) or gaussian (soft pool)',
-    'strength': 'dark edge = 1 - strength',
-    'position': 'lamp / centre, fraction of the frame (y 0 = bottom)',
-    'aim': 'cone: where the axis hits',
-    'distance': 'cone: lamp in front, x frame width',
-    'angle': 'cone: half opening angle',
-    'softness': 'cone: penumbra, x angle',
-    'falloff': 'cone: distance falloff exponent',
-    'size': 'gaussian: sigma, x frame size',
-    'color': 'tint',
-    'images': 'x strength on pictures',
-    'fill': 'x strength on the fill',
-}
+# the look and spot keys with a note (i18n look.<key>, spot.<key>)
+LOOK_NOTES = ('molding', 'fill', 'images', 'temperature', 'white', 'spot_collapse', 'plank_depth')
+SPOT_NOTES = (
+    'type',
+    'strength',
+    'position',
+    'aim',
+    'distance',
+    'angle',
+    'softness',
+    'falloff',
+    'size',
+    'color',
+    'images',
+    'fill',
+)
 
 
 def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     """The calibration, the shapes and the look. geometry: per object the
     world-mm outlines (export.object_geometry); extras: the renders
     (export.config_renders); dmx_info: (settings, [(channel, labels)]) or None."""
+    i18n.use(cfg.get('language'))
     show = show_name(cfg)
     doc = Doc(
-        path, 'Configuration', f'{show} · configuration · {source} · generated {today()}', show=show
+        path,
+        tr('config.title'),
+        tr('config.footer', show=show, source=source, date=today()),
+        show=show,
     )
     mmpp = float(cfg['scale_mm_per_px'])
     cw, ch = cfg['canvas']
@@ -818,15 +789,15 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     crop_box = extras['crop']
 
     def head(title):
-        _page_head(doc, 'Configuration', source)
+        _page_head(doc, tr('config.title'), source)
         doc.line(M, 38, doc.w - M, 38)
         doc.text(M, 64, title, 18, True)
 
     # --- overview ---------------------------------------------------------
-    head('Set-up and global calibration')
+    head(tr('config.setup'))
     if cfg.get('description'):
         doc.text(
-            M + doc.width('Set-up and global calibration', 18, True) + 14,
+            M + doc.width(tr('config.setup'), 18, True) + 14,
             64,
             doc.fit(' '.join(str(cfg['description']).split()), 9, 300),
             9,
@@ -847,8 +818,16 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     if proj:
         p = v(proj['position'])
         doc.dot(*p, 3, BLUE)
-        doc.text(p[0] + 6, p[1] + 3, 'lens foot point', 6.5, color=(0.6, 0.75, 0.9))
-    _dim_h(doc, v, -hw + ox, hw + ox, oy, f'picture {num(cw * mmpp, 0)} mm = {cw} px', off=26)
+        doc.text(p[0] + 6, p[1] + 3, tr('config.lens_foot'), 6.5, color=(0.6, 0.75, 0.9))
+    _dim_h(
+        doc,
+        v,
+        -hw + ox,
+        hw + ox,
+        oy,
+        tr('config.picture_width', mm=num(cw * mmpp, 0), px=cw),
+        off=26,
+    )
     _dim_v(doc, v, oy, oy + fh, -hw + ox, f'{num(fh, 0)} mm = {ch} px', off=-6)
     spans = sorted((min(p[0] for p in g['wood']), max(p[0] for p in g['wood'])) for g in geometry)
     if spans:
@@ -858,7 +837,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             spans[0][0],
             spans[-1][1],
             oy,
-            f'outer edges {num(spans[-1][1] - spans[0][0], 0)} mm',
+            tr('config.outer_edges', mm=num(spans[-1][1] - spans[0][0], 0)),
             off=12,
         )
         low = min(min(p[1] for p in g['wood']) for g in geometry)
@@ -868,9 +847,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     doc.para(
         M,
         432,
-        'Black = the whole projector picture on the frame plane at the set scale. Red dot = '
-        'origin of an object (middle of its bottom plank). Light numbers between frames = the gap, '
-        'wood to wood, in mm.',
+        tr('config.setup_note'),
         7,
         520,
         color=MUTED,
@@ -878,16 +855,13 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     doc.para(
         M,
         458,
-        'Transformation: local (frame.inner, mm) x scale, rotated, + origin = world mm; then the '
-        'global rotation, - image_offset, / scale_mm_per_px = projector pixels (x from the middle, y up '
-        'from the bottom edge). The inner corners are local, so the global alignment (step 3) leaves '
-        'the shape calibration (step 4) intact.',
+        tr('config.transformation'),
         8,
         520,
     )
 
     rx = M + 545
-    y = doc.section(rx, 90, 'Global')
+    y = doc.section(rx, 90, tr('config.global'))
     y = table(
         doc,
         rx,
@@ -895,15 +869,15 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         [
             ('canvas', f'{cw} x {ch} px'),
             ('scale_mm_per_px', f'{num(mmpp, 3)} mm/px'),
-            ('picture on frame plane', f'{num(cw * mmpp, 0)} x {num(fh, 0)} mm'),
-            ('rotation', f'{num(cfg.get("rotation", 0), 3)} deg'),
+            (tr('config.picture_on_plane'), f'{num(cw * mmpp, 0)} x {num(fh, 0)} mm'),
+            ('rotation', tr('unit.deg', v=num(cfg.get('rotation', 0), 3))),
             ('image_offset', f'[{num(ox)}, {num(oy)}] mm'),
             ('gamma', _value(cfg.get('gamma', 'none'))),
         ],
         [100, 125],
     )
     if proj:
-        y = doc.section(rx, y + 10, 'Projector (parallax)')
+        y = doc.section(rx, y + 10, tr('config.projector'))
         y = table(
             doc,
             rx,
@@ -911,11 +885,11 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             [
                 ('position', _value(proj['position']) + ' mm'),
                 ('distance', f'{num(proj["distance"])} mm'),
-                ('plank_depth', f'{num(look.get("plank_depth", 0))} mm (0 = off)'),
+                ('plank_depth', tr('unit.mm_off', v=num(look.get('plank_depth', 0)))),
             ],
             [100, 125],
         )
-    y = doc.section(rx, y + 10, 'Objects')
+    y = doc.section(rx, y + 10, tr('config.objects'))
     rows = []
     for g in geometry:
         wood = np.asarray(g['wood'])
@@ -934,14 +908,14 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         y,
         rows,
         [22, 70, 62, 80],
-        head=['id', 'name', 'wood mm', 'pixels x, y'],
+        head=['id', tr('col.name'), tr('col.wood_mm'), 'pixels x, y'],
         size=7.5,
         lead=12,
     )
     doc.para(
         rx,
         y + 6,
-        'Wood = outer contour of the frame (mitred, before the rounding).',
+        tr('config.wood_note'),
         7,
         doc.w - M - rx,
         color=MUTED,
@@ -950,7 +924,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     # --- one page per object ----------------------------------------------
     for g in geometry:
         doc.new_page()
-        head(f'Object {g["id"]} · {g["name"]}')
+        head(tr('config.object', id=g['id'], name=g['name']))
         if g.get('description'):
             doc.para(M, 80, ' '.join(str(g['description']).split()), 8, 420, color=MUTED)
         inner = np.asarray(g['inner_local'], float)
@@ -987,39 +961,41 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         o = v((0, 0))
         doc.line(o[0] - 6, o[1], o[0] + 6, o[1], BLUE, 0.8)
         doc.line(o[0], o[1] - 6, o[0], o[1] + 6, BLUE, 0.8)
-        doc.text(o[0] + 5, o[1] - 10, 'origin', 6.5, color=BLUE)
-        _dim_h(doc, v, lo[0], hi[0], lo[1], f'wood {num(hi[0] - lo[0], 1)} mm', off=24)
+        doc.text(o[0] + 5, o[1] - 10, tr('config.origin'), 6.5, color=BLUE)
+        _dim_h(doc, v, lo[0], hi[0], lo[1], tr('config.wood_size', v=num(hi[0] - lo[0], 1)), off=24)
         _dim_h(
             doc,
             v,
             inner[:, 0].min(),
             inner[:, 0].max(),
             lo[1],
-            f'canvas {num(np.ptp(inner[:, 0]), 1)} mm',
+            tr('config.canvas_size', v=num(np.ptp(inner[:, 0]), 1)),
             off=12,
         )
-        _dim_v(doc, v, lo[1], hi[1], lo[0], f'wood {num(hi[1] - lo[1], 1)} mm', off=-24)
+        _dim_v(
+            doc, v, lo[1], hi[1], lo[0], tr('config.wood_size', v=num(hi[1] - lo[1], 1)), off=-24
+        )
         _dim_v(
             doc,
             v,
             inner[:, 1].min(),
             inner[:, 1].max(),
             hi[0],
-            f'canvas {num(np.ptp(inner[:, 1]), 1)} mm',
+            tr('config.canvas_size', v=num(np.ptp(inner[:, 1]), 1)),
             off=22,
         )
         lx = M
         for fill, t in (
-            (WOOD, 'wood (outer contour, mitred)'),
-            (GILT, 'projected molding (rounded)'),
-            (CLOTH, 'canvas = picture area'),
-            (RED, 'inner corner = calibration point'),
+            (WOOD, 'wood'),
+            (GILT, 'molding'),
+            (CLOTH, 'canvas'),
+            (RED, 'corner'),
         ):
             doc.rect(lx, 541, 8, 8, fill=fill, stroke=INK, lw=0.3)
-            lx += doc.text(lx + 12, 548, t, 7, color=MUTED) + 26
+            lx += doc.text(lx + 12, 548, tr(f'legend.{t}'), 7, color=MUTED) + 26
 
         rx = M + 470
-        y = doc.section(rx, 90, 'Placement')
+        y = doc.section(rx, 90, tr('config.placement'))
         (bx0, by0), (bx1, by1) = g['bbox_px']
         y = table(
             doc,
@@ -1028,13 +1004,13 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             [
                 ('origin', _value([float(c) for c in g['origin']]) + ' mm'),
                 ('scale', num(g['scale'], 4)),
-                ('rotation', f'{num(g["rotation"], 3)} deg'),
+                ('rotation', tr('unit.deg', v=num(g['rotation'], 3))),
                 ('border (plank)', f'{num(g["border"])} mm'),
                 ('pixels', f'x {num(bx0, 1)}-{num(bx1, 1)}, y {num(by0, 1)}-{num(by1, 1)}'),
             ],
             [85, 200],
         )
-        y = doc.section(rx, y + 10, 'Inner corners (frame.inner, local mm)')
+        y = doc.section(rx, y + 10, tr('config.corners'))
         lead = min(12.2, (doc.h - 110 - y) / (len(inner) + 1))
         size = min(7.8, lead * 0.66)
         rows = [
@@ -1047,7 +1023,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             y,
             rows,
             [24, 60, 60, 110],
-            head=['#', 'x', 'y', 'projector px'],
+            head=['#', 'x', 'y', tr('col.projector_px')],
             size=size,
             lead=lead,
         )
@@ -1055,9 +1031,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         doc.para(
             rx,
             y + 8,
-            f'Edges of the inner polygon: {num(seg.min(), 1)} to {num(seg.max(), 1)} mm, '
-            f'{len(inner)} corners. In step 4 (page corners) < > selects a corner, the arrows move '
-            'it 1 mm (Shift 10).',
+            tr('config.corners_note', lo=num(seg.min(), 1), hi=num(seg.max(), 1), n=len(inner)),
             7.5,
             doc.w - M - rx,
             color=MUTED,
@@ -1065,7 +1039,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
 
     # --- molding, light and look -------------------------------------------
     doc.new_page()
-    head('Molding and light')
+    head(tr('config.molding'))
     detail = extras['molding_detail']
     dw = 400
     dh = dw * detail.shape[0] / detail.shape[1]
@@ -1073,8 +1047,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     doc.para(
         M,
         80 + dh + 12,
-        'Render without pictures (the fill) at full light, top of the largest frame: the '
-        'profile, the fixed light direction and the shadow the molding throws on the canvas.',
+        tr('config.molding_note'),
         7,
         dw,
         color=MUTED,
@@ -1083,18 +1056,15 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     doc.para(
         M,
         80 + dh + 36,
-        f'Brightness above 1 asks for more light than the projector has, so the '
-        f'render is stored {num(headroom, 2)} x darker and the lamps give that back: the clipping comes '
-        'after the dimming, and a dimmed spot keeps its gradient. At full light the picture is the '
-        'same.',
+        tr('config.headroom_note', h=num(headroom, 2)),
         8,
         dw,
     )
     rx = M + 430
     y = 90
     for title, node, notes in (
-        ('border', cfg.get('border') or {}, {}),
-        ('light', cfg.get('light') or {}, {}),
+        ('border', cfg.get('border') or {}, ()),
+        ('light', cfg.get('light') or {}, ()),
         (
             'look',
             {k: x for k, x in look.items() if not isinstance(x, dict) and x is not None},
@@ -1107,7 +1077,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
                 doc,
                 rx,
                 y,
-                [(k, _value(x), notes.get(k, '')) for k, x in node.items()],
+                [(k, _value(x), tr(f'look.{k}') if k in notes else '') for k, x in node.items()],
                 [80, 80, 180],
                 size=7.8,
                 lead=12,
@@ -1117,14 +1087,14 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
 
     # --- the spot ---------------------------------------------------------
     doc.new_page()
-    head('The pretend spot: how the light falls')
+    head(tr('config.spot'))
     iw = (doc.w - 2 * M - 20) / 3
     asp = (crop_box[3] - crop_box[1]) / (crop_box[2] - crop_box[0])
     for k, (img, t) in enumerate(
         (
-            (extras['white_spot'], 'with the spot, as set'),
-            (extras['gain_map'], 'spot strength on the picture (false colour)'),
-            (extras['white_flat'], 'without the spot (strength 0)'),
+            (extras['white_spot'], tr('config.with_spot')),
+            (extras['gain_map'], tr('config.spot_map')),
+            (extras['white_flat'], tr('config.without_spot')),
         )
     ):
         x = M + k * (iw + 10)
@@ -1133,8 +1103,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     doc.text(
         M,
         78 + iw * asp + 21,
-        'Every canvas white, no pictures: only the light. Each frame gets its own '
-        'spot, placed relative to its own outline, so all frames get the same fan of light.',
+        tr('config.spot_note'),
         7,
         color=MUTED,
     )
@@ -1143,7 +1112,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     rx = M
     y = top + 7
     for title, spot in (
-        ('spot (picture and fill)', look.get('spot')),
+        (tr('config.spot_table'), look.get('spot')),
         ('molding_spot', look.get('molding_spot')),
     ):
         if not spot:
@@ -1167,7 +1136,11 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
             if spot.get('type') == 'cone'
             else ['type', 'strength', 'position', 'size', 'color', 'images', 'fill']
         )
-        rows = [(k, _value(spot[k]), SPOT_NOTES.get(k, '')) for k in keys if k in spot]
+        rows = [
+            (k, _value(spot[k]), tr(f'spot.{k}') if k in SPOT_NOTES else '')
+            for k in keys
+            if k in spot
+        ]
         table(doc, rx, y, rows, [60, 80, 220], size=7.5, lead=11.5)
         rx += 390
         y = top + 7
@@ -1175,12 +1148,12 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     # --- the spot on a stage -----------------------------------------------
     if extras.get('stage_spot') is not None:
         doc.new_page()
-        head(f'The spot on a stage: {extras["stage_name"]}')
+        head(tr('config.stage_spot', name=extras['stage_name']))
         iw = (doc.w - 2 * M - 10) / 2
         for k, (img, t) in enumerate(
             (
-                (extras['stage_spot'], 'with the spot, as in the show'),
-                (extras['stage_flat'], 'without the spot (strength 0)'),
+                (extras['stage_spot'], tr('config.with_spot_show')),
+                (extras['stage_flat'], tr('config.without_spot')),
             )
         ):
             x = M + k * (iw + 10)
@@ -1190,12 +1163,12 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         doc.para(
             M,
             80 + iw * asp + 32,
-            f'The spot brightens each frame around its aim point and lets the '
-            f'edges fall back to {num(1 - float(spot.get("strength", 0)), 2)}, so the frames look lit by '
-            'the theatre light. As the desk dims the light the pool flattens first '
-            f'(spot_collapse {num(look.get("spot_collapse", 0), 2)}); at full light nothing changes. '
-            f'The colour comes from look.temperature ({num(look.get("temperature", 6500), 0)} K) or the '
-            "desk's cct channel.",
+            tr(
+                'config.stage_spot_note',
+                edge=num(1 - float(spot.get('strength', 0)), 2),
+                collapse=num(look.get('spot_collapse', 0), 2),
+                kelvin=num(look.get('temperature', 6500), 0),
+            ),
             8.5,
             doc.w - 2 * M,
         )
@@ -1205,28 +1178,31 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         settings, channels = dmx_info
         doc.new_page()
         head('DMX')
-        y = doc.section(M, 90, 'Input')
+        y = doc.section(M, 90, tr('config.dmx_input'))
         rows = [
             (k, _value(settings[k]))
             for k in ('source', 'universe', 'port', 'address', 'cct', 'smooth', 'start')
             if k in settings
         ]
         y = table(doc, M, y, rows, [80, 300])
-        y = doc.section(M, y + 12, 'Channels')
+        y = doc.section(M, y + 12, tr('config.dmx_channels'))
         address = int(settings.get('address', 1))
         rows = [
             (f'{address + off - 1}', f'offset {off}', ' + '.join(labels))
             for off, labels in channels
         ]
-        y = table(doc, M, y, rows, [60, 60, 300], head=['DMX channel', 'offset', 'function'])
+        y = table(
+            doc,
+            M,
+            y,
+            rows,
+            [60, 60, 300],
+            head=[tr('col.dmx_channel'), 'offset', tr('col.function')],
+        )
         doc.para(
             M,
             y + 10,
-            'Channel = address + offset - 1. Objects sharing a channel dim together. '
-            'cct: 128 = look.temperature, 0-128 from the warm end, 128-255 to the cool end '
-            '(dmx.cct). start full: a channel is full (cct 128) until the desk changes its '
-            'value; start desk: the desk rules from its first frame. '
-            'smooth: time constants up / down in seconds.',
+            tr('config.dmx_note'),
             8,
             420,
             color=MUTED,
@@ -1237,7 +1213,7 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
     per_col = 64
     for p0 in range(0, len(lines), per_col * 2):
         doc.new_page()
-        head('Appendix: config.yaml' + (' (continued)' if p0 else ''))
+        head(tr('config.appendix') + (tr('config.continued') if p0 else ''))
         for c in range(2):
             for k, line in enumerate(lines[p0 + c * per_col : p0 + (c + 1) * per_col]):
                 doc.text(

@@ -148,6 +148,7 @@ class Dmx(Node):
 
 class Config(Node):
     description: str | None = None
+    language: Literal['en', 'nl'] | None = None  # of the PDF export; default en
     scale_mm_per_px: Positive
     canvas: Annotated[list[Annotated[int, Field(gt=0)]], Field(min_length=2, max_length=2)]
     rotation: float | None = None

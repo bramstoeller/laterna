@@ -2,6 +2,8 @@
 # projector. Copy this folder, rename it, and put your own frames, media
 # and scenes in it. All sizes are in mm; y points up.
 
+language: en                 # of the PDF export (step 6): en or nl
+
 # global calibration (step 3, global alignment, writes these)
 scale_mm_per_px: 4.0         # measured on site: project a bar, measure it
 canvas: [1920, 1080]         # the projector's native pixels
