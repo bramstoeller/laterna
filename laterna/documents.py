@@ -569,7 +569,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
             (X_NUM, '#'),
             (X_PIC, tr('col.picture')),
             (X_NAME, tr('run.scene')),
-            (X_IN, tr('col.in')),
+            (X_IN, tr('col.next')),
         ]
         if split:
             cols += [
@@ -615,26 +615,26 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
         doc.new_page()
         y = head(rows[0], rows[-1])
         for i in rows:
-            st, f = scenes[i], facts[i]
+            st = scenes[i]
             h = row_height(i)
             doc.line(M, y, doc.w - M, y)
-            _, col = ENTRY[f['entry']]
-            doc.rect(X_NUM, y + 4, 3, h - 8, fill=col)
+            nxt = facts[i + 1] if i + 1 < n else None  # the step on to the next scene
+            if nxt:
+                doc.rect(X_NUM, y + 4, 3, h - 8, fill=ENTRY[nxt['entry']][1])
             doc.text(X_NUM + 7, y + 17, str(i + 1), 12, True)
             picture(i, 0, X_PIC, y + 5, PIC_W)
             doc.text(
                 X_NAME, y + 15, doc.fit(st.get('name', '?'), 10, X_IN - X_NAME - 8, True), 10, True
             )
-            # in
-            _, lc = ENTRY[f['entry']]
-            label = tr(f'entry.{f["entry"]}')
-            if f['entry'] == 'auto':  # the time it comes after: the hold before + the fade
-                label += f' {duration(scenes[i - 1]["hold"] + f["fade"])}'
-            w = doc.label(X_IN, y + 7, label, lc)
-            if desk[i]:  # the desk can take this step too
-                doc.label(X_IN + w + 3, y + 7, 'DMX', DESK)
-            if i:
-                doc.text(X_IN, y + 29, tr('run.fade', t=secs(f['fade'])), 8, color=MUTED)
+            # next: how the show goes on from here, and the fade to the next scene
+            if nxt:
+                label = tr(f'entry.{nxt["entry"]}')
+                if nxt['entry'] == 'auto':  # after how long: this scene's hold + the fade
+                    label += f' {duration(st["hold"] + nxt["fade"])}'
+                w = doc.label(X_IN, y + 7, label, ENTRY[nxt['entry']][1])
+                if desk[i + 1]:  # the desk can take this step too
+                    doc.label(X_IN + w + 3, y + 7, 'DMX', DESK)
+                doc.text(X_IN, y + 29, tr('run.fade', t=secs(nxt['fade'])), 8, color=MUTED)
             # objects
             now = object_contents(st, cfg)
             before = object_contents(scenes[i - 1], cfg) if i else {}
