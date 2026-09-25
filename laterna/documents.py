@@ -47,7 +47,12 @@ GREEN = (0.24, 0.48, 0.24)
 ORANGE = (0.75, 0.48, 0.10)
 RED = (0.75, 0.22, 0.17)
 BLUE = (0.18, 0.40, 0.56)
-DESK = (0.15, 0.28, 0.75)  # a step the desk can take too (the blue state block)
+DESK = (0.15, 0.28, 0.75)
+YELLOW = (
+    1.0,
+    0.95,
+    0.62,
+)  # a cue list row where only the key goes on  # a step the desk can take too (the blue state block)
 STRIP_OFF = (0.92, 0.91, 0.88)  # a scene cell in the strip
 NIGHT = (0.04, 0.04, 0.04)
 WOOD = (0.16, 0.12, 0.08)
@@ -493,6 +498,10 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     i18n.use(cfg.get('language'))
     facts = scene_facts(scenes, fades)
     desk = desk_steps(cfg, scenes, facts)
+    # the steps only a key takes (no desk) where most key steps have the desk
+    # too: the few places the operator acts, marked yellow in the cue list
+    key_only = [j > 0 and facts[j]['entry'] == 'key' and not desk[j] for j in range(len(scenes))]
+    mark_key_only = sum(desk) > sum(key_only)
     n = len(scenes)
     show = show_name(cfg)
     doc = Doc(
@@ -527,8 +536,7 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
     _page_head(doc, tr('run.title'))
     y = _strip(doc, 40, scenes, facts, desk)  # at the top, as on the other pages
     kinds = _media_kinds(scenes)
-    key_only = any(desk) and any(f['entry'] == 'key' and not d for f, d in zip(facts[1:], desk[1:]))
-    _strip_legend(doc, M, y + 22, any(desk), kinds, key_only)
+    _strip_legend(doc, M, y + 22, any(desk), kinds, any(desk) and any(key_only))
     y += 40
     doc.line(M, y, doc.w - M, y)
     if description:
@@ -643,8 +651,10 @@ def run_sheet(path, cfg, scenes, fades, views, crop_box, source, description=Non
         for i in rows:
             st = scenes[i]
             h = row_height(i)
-            doc.line(M, y, doc.w - M, y)
             nxt = facts[i + 1] if i + 1 < n else None  # the step on to the next scene
+            if mark_key_only and nxt and key_only[i + 1]:
+                doc.rect(M, y, doc.w - 2 * M, h, fill=YELLOW)
+            doc.line(M, y, doc.w - M, y)
             if nxt:
                 doc.rect(X_NUM, y + 4, 3, h - 8, fill=ENTRY[nxt['entry']][1])
             doc.text(X_NUM + 7, y + 17, str(i + 1), 12, True)
