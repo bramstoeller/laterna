@@ -453,8 +453,8 @@ TEXTS = {
         'nl': 'op een toets',
     },
     'legend.step_desk': {
-        'en': 'on a key or by the desk',
-        'nl': 'op een toets of door de tafel',
+        'en': 'on a key or by DMX',
+        'nl': 'op een toets of via DMX',
     },
     'legend.step_auto': {
         'en': 'by itself',
