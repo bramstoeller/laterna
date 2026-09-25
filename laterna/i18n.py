@@ -33,7 +33,7 @@ def tr(key, **values):
 
 TEXTS = {
     'run.title': {
-        'en': 'Run sheet',
+        'en': 'Cue sheet',
         'nl': 'Draaiboek',
     },
     'run.footer': {

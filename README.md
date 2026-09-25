@@ -63,7 +63,7 @@ In show order, each saving what it sets to `config.yaml`:
    rotation and position of the image
 4. **Shape calibration**: move the frames' corners onto the real frames
 5. **Look**: brightness per layer, spotlights, colour temperature
-6. **Export**: config sheet, run sheet, backup and the scenes' values as PDF
+6. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF
 7. **Present**: play the scenes from `scenes.yaml`
 
 Q / Esc goes back: from an app to the show's menu, from there to the

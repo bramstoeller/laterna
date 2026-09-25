@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 """Export: four PDFs of the loaded config.yaml and scenes.yaml, written to
-_export/ next to config.yaml (laterna/documents.py lays them out):
+_export/ next to config.yaml (laterna/documents.py lays them out), named
+in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
                  with and without it and a map of its strength), a scene
                  with and without it, DMX, and config.yaml itself
-  run-sheet.pdf  the operator's cue list: keys, state blocks, what to do
+  cue-sheet.pdf  the operator's cue list: keys, state blocks, what to do
                  when something goes wrong, then every scene with its
                  picture, how it is reached (key or by itself, fade, time
                  since the last key), what it does while it stands, what is
@@ -45,6 +46,12 @@ from . import dmx, documents, render, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_export'
+# the PDFs by the export's language (config.yaml language): backup, cue
+# sheet, config, scenes
+FILES = {
+    'en': ('backup.pdf', 'cue-sheet.pdf', 'config.pdf', 'scenes.pdf'),
+    'nl': ('backup.pdf', 'draaiboek.pdf', 'configuratie.pdf', 'scenes.pdf'),
+}
 MAX_COMBINATIONS = 64  # slideshow pictures per scene in the export
 THUMB_WIDTH = 480  # px of the cue list pictures
 
@@ -329,7 +336,11 @@ def export_all(
     progress('pictures for the config pages...')
     extras = config_renders(cfg, renderer, scenes, views, gain)
 
-    paths = [out / 'backup.pdf', out / 'run-sheet.pdf', out / 'config.pdf', out / 'scenes.pdf']
+    names = FILES[cfg.get('language') or 'en']
+    for old in {n for files in FILES.values() for n in files} | {'run-sheet.pdf'}:
+        if old not in names and (out / old).exists():
+            (out / old).unlink()  # the same document under another language's name
+    paths = [out / name for name in names]
     progress(f'writing {paths[0].name}...')
     firsts = documents.backup(paths[0], cfg, scenes, views)
     progress(f'writing {paths[1].name}...')
@@ -400,7 +411,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
 
 def main():
     ap = argparse.ArgumentParser(
-        description='Export config, run sheet, backup and scenes as PDF (headless)'
+        description='Export config, cue sheet, backup and scenes as PDF (headless)'
     )
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--scenes', default='scenes.yaml')
