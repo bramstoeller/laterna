@@ -47,7 +47,6 @@ class Faders:
     def toggle(self):
         self.visible = not self.visible
         self.drag = None
-        pygame.mouse.set_visible(self.visible)
 
     def _at(self, pos):
         """The fader column under the mouse (track plus a margin), or None."""

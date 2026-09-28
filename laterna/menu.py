@@ -133,7 +133,6 @@ def menu(screen, title, subtitle, items, on_pick, quit_hint='Q goes back'):
     def pick(index):
         nonlocal message
         result = on_pick(index)
-        pygame.mouse.set_visible(True)
         pygame.key.set_repeat()  # apps may enable key repeat; the menu wants none
         if result is None:
             return False
@@ -201,7 +200,7 @@ def main():
     # scaled to fill the screen (ui.set_canvas); back in the picker the
     # show's canvas stays: a new mode in fullscreen closes and reopens the
     # window, so the display only changes for a show with another canvas
-    screen = ui.init_screen(None, ui.APP_NAME, mouse_visible=True)
+    screen = ui.init_screen(None, ui.APP_NAME)
 
     def open_show(index):
         nonlocal screen

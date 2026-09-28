@@ -40,11 +40,10 @@ def menu_size():
     return (MENU_WIDTH, round(MENU_WIDTH * h / w)) if w else (MENU_WIDTH, 1080)
 
 
-def init_screen(canvas, caption, mouse_visible=False):
+def init_screen(canvas, caption):
     """Fullscreen display with a canvas of `canvas` pixels (see set_canvas;
-    None: menu_size()). The mouse is hidden except where it is needed (the
-    menu).
-    """
+    None: menu_size()). The mouse cursor is hidden, always: clicks and drags
+    still work (the menu, the faders)."""
     os.environ.setdefault('SDL_VIDEO_X11_WMCLASS', APP_ID)
     os.environ.setdefault('SDL_VIDEO_WAYLAND_WMCLASS', APP_ID)
     # scaling a canvas that is not the desktop's size: smooth, not blocky
@@ -55,7 +54,7 @@ def init_screen(canvas, caption, mouse_visible=False):
         pygame.display.set_icon(pygame.image.load(str(icon)))
     screen = set_canvas(menu_size() if canvas is None else canvas)
     pygame.display.set_caption(caption)
-    pygame.mouse.set_visible(mouse_visible)
+    pygame.mouse.set_visible(False)
     return screen
 
 
