@@ -17,12 +17,15 @@ patterns:
      low and slightly high on purpose) should then deviate symmetrically —
      they show direction and sensitivity. Only valid at exact 1:1 pixels:
      judge on the projector, not on a scaled laptop screen. The stripes are
-     fixed at 1 px — that is how the method is defined; thicker pitches
-     measurably shift the result (panel and processing effects), as seen
-     in practice.
+     1 px by default, as the method defines them; L steps them through
+     1, 2, 3 and 4 px. The field stays 50% light at every width, so a
+     result that moves with the width shows the panel's own pixel effects
+     (neighbouring pixels pulling each other, optical blur) rather than
+     its gamma.
 
   R / G / B / W  colour: red / green / blue / white
   C / M / Y / O  colour: cyan / magenta / yellow / orange
+  L  the gamma chart's stripe width: 1, 2, 3, 4 px
   H  help overlay on/off
   Q / ESC  quit (back to the menu when started from main.py)
 
@@ -50,6 +53,7 @@ NEAR_BLACK = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20]
 NEAR_WHITE = [255, 254, 253, 252, 250, 248, 244, 240, 232, 224]
 # middle = the null indicator (target); outer two deliberately off
 GAMMAS = [2.0, 2.2, 2.4]
+STRIPES = (1, 2, 3, 4)  # the gamma chart's stripe widths, px (L)
 
 PATTERN_KEYS = {
     pygame.K_1: 'near-black',
@@ -117,18 +121,20 @@ def staircase(w, h, color):
     return image
 
 
-def gamma_chart(w, h, color):
+def gamma_chart(w, h, color, stripe=1):
     """Line-interleave gamma chart: one 50%-light stripe field with three
-    solid patches; the middle one is the null indicator. Stripes are 1 px
-    (the method's definition); the field height is even so the average is
-    exactly 50%."""
+    solid patches; the middle one is the null indicator. Stripes are
+    `stripe` px (1 is the method's definition); the field is a whole
+    number of stripe pairs high so the average is exactly 50%."""
     image = np.zeros((h, w, 3), np.uint8)
     n = len(GAMMAS)
     field_w = 2 * w // 3
     fx0 = (w - field_w) // 2
     y0 = h // 6
-    y1 = y0 + ((5 * h // 6 - y0) // 2) * 2
-    image[y0:y1:2, fx0 : fx0 + field_w] = color  # alternate lines: colour / black
+    pair = 2 * stripe
+    y1 = y0 + ((5 * h // 6 - y0) // pair) * pair
+    lit = (np.arange(y0, y1) - y0) // stripe % 2 == 0  # alternate stripes: colour / black
+    image[y0:y1, fx0 : fx0 + field_w][lit] = color
     col = field_w // n
     my = (y1 - y0) // 4
     for i, g in enumerate(GAMMAS):
@@ -144,7 +150,10 @@ def gamma_chart(w, h, color):
             y1 + 44,
         )
     _label(
-        image, 'adjust gamma (up/down) until the MIDDLE patch blends into the stripes', fx0, h - 24
+        image,
+        f'adjust gamma (up/down) until the MIDDLE patch blends into the stripes ({stripe} px, L)',
+        fx0,
+        h - 24,
     )
     return image
 
@@ -166,6 +175,11 @@ def self_test(cfg):
     assert all(np.all(np.diff(lut[:, c].astype(int)) >= 0) for c in range(3))
     # measured 2.5, target 2.2: mid-values must come out brighter
     assert lut[128, 0] > 128
+    for stripe in STRIPES:  # every width averages to exactly 50%
+        pairs = 2 * stripe * 24  # whole stripe pairs from the field's top
+        field = gamma_chart(64, 600, (255, 255, 255), stripe)[100 : 100 + pairs, 11:53]
+        lit = field[:, 0, 0] == 255
+        assert lit.sum() * 2 == len(lit), stripe
     image = gamma_chart(*cfg['canvas'], (255, 255, 255))
     render.apply_gamma(image, lut)
     render.save_png(image, '_renders/dynamic-range.png')
@@ -188,11 +202,15 @@ def run(screen=None, config='config.yaml'):
     pattern = 'near-black'
     color = WHITE
     show_help = True
+    stripe = STRIPES[0]
     dirty = False
     message = ''
 
     def show():
-        image = PATTERNS[pattern](w, h, color)
+        if pattern == 'gamma':
+            image = gamma_chart(w, h, color, stripe)
+        else:
+            image = PATTERNS[pattern](w, h, color)
         # closed loop: view the patterns through the same correction the
         # renderer applies, so the chart verifies the saved value
         render.apply_gamma(image, render.gamma_lut(cfg))
@@ -209,7 +227,8 @@ def run(screen=None, config='config.yaml'):
                     + ('   * unsaved changes *' if dirty else ''),
                     '1 near-black  2 near-white  3 staircase  4 gamma',
                     'up/down adjust gamma until the 2.2 patch blends (Shift = coarse)',
-                    'T correction off  S save  R/G/B/W C/M/Y/O colour  H help  Q quit',
+                    f'L stripes ({stripe} px)  T correction off  S save'
+                    + '  R/G/B/W C/M/Y/O colour  H help  Q quit',
                 ]
                 + ([message] if message else []),
             )
@@ -246,6 +265,8 @@ def run(screen=None, config='config.yaml'):
                 calibration.save_config(cfg, config)
                 dirty = False
                 message = f'saved to {config}'
+            elif event.key == pygame.K_l:
+                stripe = STRIPES[(STRIPES.index(stripe) + 1) % len(STRIPES)]
             elif event.key == pygame.K_h:
                 show_help = not show_help
             show()
