@@ -138,6 +138,7 @@ class Dmx(Node):
     smooth: Annotated[list[NonNegative], Field(min_length=2, max_length=2)] | None = None
     channels: Channels | None = None
     start: Literal['full', 'desk'] | None = None  # full: a channel is full until it moves
+    curve: Positive | None = None  # the dimmer curve: pixel ~ fader ^ (1 / curve)
 
     @field_validator('source', mode='before')
     @classmethod

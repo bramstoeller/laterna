@@ -254,11 +254,15 @@ def _hash_file(h, path):
 
 
 def _fingerprint(config, scenes_path, cfg, scenes, supersample):
-    """Hash of everything the rendered scenes depend on: the two YAML files,
-    the supersample factor, the bytes of every shape SVG and every
-    referenced image/video, and the rendering code itself."""
+    """Hash of everything the rendered scenes depend on: the two YAML files
+    (config.yaml without its dmx section, which only acts live, so the desk
+    can be set up without a re-render), the supersample factor, the bytes
+    of every shape SVG and every referenced image/video, and the rendering
+    code itself."""
     h = hashlib.sha256()
-    h.update(pathlib.Path(config).read_bytes())
+    settings = yaml.safe_load(pathlib.Path(config).read_text()) or {}
+    settings.pop('dmx', None)
+    h.update(yaml.safe_dump(settings, sort_keys=True).encode())
     h.update(pathlib.Path(scenes_path).read_bytes())
     h.update(str(supersample).encode())
     # the rendering code itself: a code change invalidates old renders, so a

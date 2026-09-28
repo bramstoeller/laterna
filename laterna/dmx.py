@@ -21,9 +21,12 @@ Without `channels:` the map is master 1, cct 2, then per object in
 config order canvas, frame (8 channels for three frames). A missing
 channel is simply not used (no master = always full, no cct = as
 rendered).
-Levels go through a dimmer curve: linear in light (128 = half the
+Levels go through a dimmer curve, `dmx.curve`: the pixel values follow
+fader ^ (1 / curve), so the light (pixel value ^ 2.2) follows
+fader ^ (2.2 / curve). The default 2.2 is linear in light (128 = half the
 light, about 73 % of the pixel value), so half the master looks half as
-bright. See laterna/lamps.py for the compositing.
+bright; 1 is linear in pixel values (half the master about 22 % of the
+light); lower is darker in the middle, higher brighter. See laterna/lamps.py for the compositing.
 
 Sources (`dmx.source`):
   sacn    streaming ACN (E1.31) over the network, ETC Eos' native output;
@@ -82,6 +85,7 @@ DEFAULTS = {
     'channels': None,
     'smooth': [0.04, 0.08],
     'start': 'full',
+    'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
 }
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
 GLOBAL_CHANNELS = ('master', 'cct')
@@ -172,6 +176,9 @@ def settings(cfg):
     if not 1 <= dmx['address'] <= 512 - span + 1:
         raise ValueError(f'dmx.address is 1..{512 - span + 1} ({span} channels used)')
     dmx['smooth'] = parse_smooth(dmx['smooth'])
+    dmx['curve'] = float(dmx['curve'])
+    if dmx['curve'] <= 0:
+        raise ValueError('dmx.curve is a positive number (2.2: half the fader, half the light)')
     if dmx['start'] not in ('full', 'desk'):
         raise ValueError('dmx.start is full (a channel is full until it moves) or desk')
     return dmx
@@ -683,9 +690,9 @@ class Desk:
         self.ids = [o['id'] for o in cfg['objects']]
         self.labels = channel_labels(cfg, self.channels)
         self.kelvin = float(render.look_settings(cfg)['temperature'])
-        # the dimmer curve: a fader's level is linear light (half = half the
-        # light), the lamps work in display values, so level ^ (1 / gamma)
-        self.dim = 1.0 / render.GAMMA_TARGET
+        # the dimmer curve (dmx.curve): the lamps work in pixel values, which
+        # follow fader ^ (1 / curve); the light then follows fader ^ (2.2 / curve)
+        self.dim = 1.0 / self.settings['curve']
         self.receiver = receiver if receiver is not None else open_receiver(self.settings)
         # the offsets in use; before the desk's first frame (or without a
         # desk) the channels stand at "full light, as rendered" (cct 128,

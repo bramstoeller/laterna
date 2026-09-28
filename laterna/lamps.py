@@ -24,8 +24,8 @@ is below one step and the rounding goes down.
 
 Dimming (lamp_gain): the lamps are tungsten theatre spots. The level
 falls linearly in display values (the fades), the desk's faders come in
-through a dimmer curve that makes them linear in light (half the fader,
-half the light; laterna/dmx.py, Desk.levels), and the colour follows the
+through a dimmer curve, by default linear in light (half the fader, half
+the light; dmx.curve, laterna/dmx.py), and the colour follows the
 filament: its colour temperature goes with V^0.42 while its light output
 goes with V^3.4, so CCT ~ L^0.12 in linear light (3200 K is 2940 K at
 half fader, 2410 K at a tenth, redder towards black).
