@@ -23,10 +23,12 @@ the grain stays as fine as the render's own. Black stays black: the noise
 is below one step and the rounding goes down.
 
 Dimming (lamp_gain): the lamps are tungsten theatre spots. The level
-falls linearly in display values (a dimmer's fader) and the colour
-follows the filament: its colour temperature goes with V^0.42 while its
-light output goes with V^3.4, so CCT ~ L^0.12 in linear light (3200 K is
-2650 K at half fader, 1700 K at a tenth, a red glow just above black).
+falls linearly in display values (the fades), the desk's faders come in
+through a dimmer curve that makes them linear in light (half the fader,
+half the light; laterna/dmx.py, Desk.levels), and the colour follows the
+filament: its colour temperature goes with V^0.42 while its light output
+goes with V^3.4, so CCT ~ L^0.12 in linear light (3200 K is 2940 K at
+half fader, 2410 K at a tenth, redder towards black).
 The render is neutral: RGB 255 is the projector's own white, whose
 colour temperature is look.white (6500 by default; what the projector's
 COLOR TEMPERATURE setting gives). The light's colour is applied here,

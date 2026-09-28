@@ -21,8 +21,9 @@ Without `channels:` the map is master 1, cct 2, then per object in
 config order canvas, frame (8 channels for three frames). A missing
 channel is simply not used (no master = always full, no cct = as
 rendered).
-Levels are a dimmer's: linear in display values (128 = half the pixel
-value). See laterna/lamps.py for the compositing.
+Levels go through a dimmer curve: linear in light (128 = half the
+light, about 73 % of the pixel value), so half the master looks half as
+bright. See laterna/lamps.py for the compositing.
 
 Sources (`dmx.source`):
   sacn    streaming ACN (E1.31) over the network, ETC Eos' native output;
@@ -682,6 +683,9 @@ class Desk:
         self.ids = [o['id'] for o in cfg['objects']]
         self.labels = channel_labels(cfg, self.channels)
         self.kelvin = float(render.look_settings(cfg)['temperature'])
+        # the dimmer curve: a fader's level is linear light (half = half the
+        # light), the lamps work in display values, so level ^ (1 / gamma)
+        self.dim = 1.0 / render.GAMMA_TARGET
         self.receiver = receiver if receiver is not None else open_receiver(self.settings)
         # the offsets in use; before the desk's first frame (or without a
         # desk) the channels stand at "full light, as rendered" (cct 128,
@@ -770,19 +774,23 @@ class Desk:
         master channel)."""
         return self._level(self.frame(), self.channels['master'])
 
+    def _dimmed(self, data, offset):
+        """A level channel through the dimmer curve (see __init__)."""
+        return self._level(data, offset) ** self.dim
+
     def levels(self):
         data = self.frame()
-        master = self._level(data, self.channels['master'])
+        master = self._dimmed(data, self.channels['master'])
         kelvin = cct_kelvin(
             self._value(data, self.channels['cct']), self.settings['cct'], self.kelvin
         )
         objects = {}
         for oid in self.ids:
             spec = self.channels['objects'][oid]
-            power = master * self._level(data, spec.get('power'))
+            power = master * self._dimmed(data, spec.get('power'))
             objects[oid] = (
-                power * self._level(data, spec.get('canvas')),
-                power * self._level(data, spec.get('frame')),
+                power * self._dimmed(data, spec.get('canvas')),
+                power * self._dimmed(data, spec.get('frame')),
                 kelvin,
             )
         return Levels(objects)
