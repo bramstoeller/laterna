@@ -80,13 +80,13 @@ def run(
     cfg['look'] = render.look_settings(cfg)
     if dmx_source:
         cfg['dmx'] = {**(cfg.get('dmx') or {}), 'source': dmx_source}
-    desk = dmx.Desk(cfg)
     standalone = screen is None
     if standalone:
         screen = ui.init_screen(cfg['canvas'], f'DMX — {ui.APP_NAME}')
     else:
         pygame.display.set_caption(f'DMX — {ui.APP_NAME}')
     font = ui.help_font()
+    desk = dmx.Desk(cfg)  # after the screen: from here on the finally below frees it
     panel = faders.Faders(desk, pygame.font.SysFont('monospace', 16))
     panel.select(0)
     pygame.key.set_repeat(*REPEAT)
