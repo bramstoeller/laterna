@@ -76,6 +76,11 @@ and an amber that follows it more the warmer the cct. Channels are absolute on t
 other slot is 0.
 Before the desk's first frame the faders stand full, as the projection
 does.
+Profiles (`dmx.profiles`, {name: settings}): a venue each, say the
+theatre's desk at 101 and a test desk at 1 with lamps on the DMX out.
+`dmx.profile` names the one in use (else the first); its settings lie
+over the shared ones in `dmx:` (a key it sets wins). The DMX app
+(laterna/desk.py) picks one and saves the choice.
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
 that the cable and the patch are right.
 """
@@ -99,6 +104,7 @@ DEFAULTS = {
     'start': 'full',
     'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
     'output': None,  # {channel: function} on the Enttec's DMX out
+    'profile': None,  # the name of the profile in use (dmx.profiles)
 }
 OUTPUT_FACTORS = ('master', 'cct')  # -name: 255 - it
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
@@ -165,9 +171,32 @@ def channel_span(channels):
     return max(offsets, default=0)
 
 
+def resolve(raw):
+    """dmx as config.yaml has it (a dict or None) with the profile in use
+    laid over the shared keys, as a dict without `profiles`; `profile` is
+    its name (None without profiles)."""
+    raw = dict(raw or {})
+    profiles = raw.pop('profiles', None) or {}
+    name = raw.pop('profile', None)
+    if not profiles:
+        if name is not None:
+            raise ValueError('dmx.profile needs dmx.profiles')
+        return raw
+    name = next(iter(profiles)) if name is None else name
+    if name not in profiles:
+        raise ValueError(f'dmx.profile: {name} is not one of {", ".join(map(str, profiles))}')
+    return {**raw, **(profiles[name] or {}), 'profile': name}
+
+
+def profile_names(cfg):
+    """The profiles in dmx.profiles, in config order."""
+    return list(((cfg.get('dmx') or {}).get('profiles') or {}))
+
+
 def settings(cfg):
-    """cfg['dmx'] completed with DEFAULTS and checked; `channels` parsed."""
-    dmx = {**DEFAULTS, **(cfg.get('dmx') or {})}
+    """cfg['dmx'] with its profile, completed with DEFAULTS and checked;
+    `channels` parsed."""
+    dmx = {**DEFAULTS, **resolve(cfg.get('dmx'))}
     if dmx['source'] not in SOURCES:
         raise ValueError(f'dmx.source is one of {", ".join(SOURCES)}')
     dmx['universe'] = int(dmx['universe'])

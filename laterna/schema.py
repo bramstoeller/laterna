@@ -134,7 +134,7 @@ class Channels(Node):
 OutputFactor = Literal['master', 'cct', '-master', '-cct'] | Annotated[float, Field(ge=0, le=255)]
 
 
-class Dmx(Node):
+class DmxProfile(Node):
     source: Literal['off', 'sacn', 'artnet', 'enttec', 'demo'] | None = None
     universe: Annotated[int, Field(ge=0, le=63999)] | None = None
     port: str | None = None  # the Enttec's serial port, or auto
@@ -151,6 +151,19 @@ class Dmx(Node):
     def bare_off(cls, value):
         # a bare `off` in YAML is the boolean false
         return 'off' if value is False else value
+
+
+class Dmx(DmxProfile):
+    profile: str | None = None  # the one in use; default the first
+    profiles: dict[str, DmxProfile] | None = None  # by name, each over the shared keys
+
+    @model_validator(mode='after')
+    def known_profile(self):
+        if self.profile is not None and self.profile not in (self.profiles or {}):
+            raise ValueError(
+                f'profile {self.profile} is not one of: {", ".join(self.profiles or {}) or "-"}'
+            )
+        return self
 
 
 class Config(Node):

@@ -366,7 +366,7 @@ def run(
     _stop_worker()
     cfg = render.load_config(config)
     if dmx_source:
-        cfg['dmx'] = {**(cfg.get('dmx') or {}), 'source': dmx_source}
+        cfg['dmx'] = {**dmx.resolve(cfg.get('dmx')), 'source': dmx_source}
     data = render.load_scenes(scenes_path)
     scenes, fades = render.parse_scenes(data, cfg)
     if not scenes:

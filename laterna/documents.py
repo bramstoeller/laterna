@@ -31,7 +31,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
 
-from . import i18n
+from . import dmx, i18n
 from .i18n import tr
 
 A4_LANDSCAPE = landscape(A4)
@@ -377,7 +377,7 @@ def _warning(doc, x, y, size=11):
 def desk_steps(cfg, scenes, facts):
     """Per scene: whether the desk can take the show into it too (a key
     step next to a blackout, see play.py), with a desk configured."""
-    if ((cfg.get('dmx') or {}).get('source') or 'off') == 'off':
+    if (dmx.resolve(cfg.get('dmx')).get('source') or 'off') == 'off':
         return [False] * len(scenes)
     return [
         bool(j)
@@ -1247,8 +1247,8 @@ def config_sheet(path, cfg, config_text, geometry, extras, dmx_info, source):
         y = doc.section(M, 90, tr('config.dmx_input'))
         rows = [
             (k, _value(settings[k]))
-            for k in ('source', 'universe', 'port', 'address', 'cct', 'smooth', 'start')
-            if k in settings
+            for k in ('profile', 'source', 'universe', 'port', 'address', 'cct', 'smooth', 'start')
+            if settings.get(k) is not None
         ]
         y = table(doc, M, y, rows, [80, 300])
         y = doc.section(M, y + 12, tr('config.dmx_channels'))
