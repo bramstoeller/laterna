@@ -46,7 +46,7 @@ import cv2
 import numpy as np
 import pygame
 
-from . import dmx, documents, frame, render, slides, ui, video
+from . import dmx, documents, frame, profiles, render, slides, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_export'
@@ -426,9 +426,12 @@ def export_all(
         data.get('description'),
     )
     progress(f'writing {paths[1].name}...')
-    documents.config_sheet(
-        paths[1], cfg, config.read_text(), object_geometry(cfg), extras, dmx_info(cfg), source
+    # the appendix: config.yaml, then the device profile files (laterna/profiles.py)
+    text = config.read_text().rstrip('\n') + ''.join(
+        f'\n\n# ===== {name} =====\n{body.rstrip()}'
+        for name, body in profiles.texts(config.resolve().parent)
     )
+    documents.config_sheet(paths[1], cfg, text, object_geometry(cfg), extras, dmx_info(cfg), source)
     progress(f'writing {paths[2].name}...')
     documents.scenes_sheet(paths[2], cfg, scenes, fades, data, source)
     return [pdf, pptx] + paths

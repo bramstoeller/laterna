@@ -64,23 +64,20 @@ from its first frame, taken over at once (no fade from full): for a show
 whose dark comes from the desk, which starts with the master at 0. When
 the signal stops the last frame holds (a DMX receiver never blacks out
 by itself).
-Output (`dmx.output`, {channel: function}): the Enttec's DMX out (on
-`port`, shared with the input for source enttec, opened for output only
-with any other source) sends real lamps the faders: the desk's, or the
-hand's where the on-screen faders took over, as they stand (no dimmer
-curve, no smoothing: a lamp has its own). A channel's function is a
-fader, master or cct, inverted with a minus (-cct = 255 - cct), or a
-fixed value 0..255, or a list of those multiplied (each as 0..1):
-`{10: master, 11: [master, -cct]}` gives a white that follows the master
-and an amber that follows it more the warmer the cct. Channels are absolute on the out line; every
-other slot is 0.
-Before the desk's first frame the faders stand full, as the projection
-does.
-Profiles (`dmx.profiles`, {name: settings}): a venue each, say the
-theatre's desk at 101 and a test desk at 1 with lamps on the DMX out.
-`dmx.profile` names the one in use (else the first); its settings lie
-over the shared ones in `dmx:` (a key it sets wins). The DMX app
-(laterna/desk.py) picks one and saves the choice.
+Output (`dmx.output`, in a show usually from dmx-out.yaml,
+laterna/profiles.py): a DMX out sends real lamps the faders: the desk's,
+or the hand's where the on-screen faders took over, as they stand (no
+dimmer curve, no smoothing: a lamp has its own). `device` is `pro` (the
+default: an Enttec DMX USB Pro, on `port`; without one the input's, so
+one widget does both) or `open` (an Enttec Open DMX USB, a bare FTDI
+chip: laterna makes every frame itself, 40 a second). `channels` gives
+each channel a function: a fader, master or cct, inverted with a minus
+(-cct = 255 - cct), or a fixed value 0..255, or a list of those
+multiplied (each as 0..1): `{10: master, 11: [master, -cct]}` gives a
+white that follows the master and an amber that follows it more the
+warmer the cct. Channels are absolute on the out line; every other slot
+is 0. Before the desk's first frame the faders stand full, as the
+projection does.
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
 that the cable and the patch are right.
 """
@@ -103,9 +100,9 @@ DEFAULTS = {
     'smooth': [0.04, 0.08],
     'start': 'full',
     'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
-    'output': None,  # {channel: function} on the Enttec's DMX out
-    'profile': None,  # the name of the profile in use (dmx.profiles)
+    'output': None,  # {device, port, channels}: the DMX out
 }
+OUTPUT_DEVICES = ('pro', 'open')
 OUTPUT_FACTORS = ('master', 'cct')  # -name: 255 - it
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
 GLOBAL_CHANNELS = ('master', 'cct')
@@ -171,32 +168,10 @@ def channel_span(channels):
     return max(offsets, default=0)
 
 
-def resolve(raw):
-    """dmx as config.yaml has it (a dict or None) with the profile in use
-    laid over the shared keys, as a dict without `profiles`; `profile` is
-    its name (None without profiles)."""
-    raw = dict(raw or {})
-    profiles = raw.pop('profiles', None) or {}
-    name = raw.pop('profile', None)
-    if not profiles:
-        if name is not None:
-            raise ValueError('dmx.profile needs dmx.profiles')
-        return raw
-    name = next(iter(profiles)) if name is None else name
-    if name not in profiles:
-        raise ValueError(f'dmx.profile: {name} is not one of {", ".join(map(str, profiles))}')
-    return {**raw, **(profiles[name] or {}), 'profile': name}
-
-
-def profile_names(cfg):
-    """The profiles in dmx.profiles, in config order."""
-    return list(((cfg.get('dmx') or {}).get('profiles') or {}))
-
-
 def settings(cfg):
-    """cfg['dmx'] with its profile, completed with DEFAULTS and checked;
-    `channels` parsed."""
-    dmx = {**DEFAULTS, **resolve(cfg.get('dmx'))}
+    """cfg['dmx'] completed with DEFAULTS and checked; `channels` and
+    `output` parsed."""
+    dmx = {**DEFAULTS, **(cfg.get('dmx') or {})}
     if dmx['source'] not in SOURCES:
         raise ValueError(f'dmx.source is one of {", ".join(SOURCES)}')
     dmx['universe'] = int(dmx['universe'])
@@ -229,14 +204,20 @@ def settings(cfg):
 
 
 def parse_output(value):
-    """dmx.output as {channel: [factor, ...]}, a factor being a name from
-    OUTPUT_FACTORS (with a minus: inverted) or a number 0..255; or None."""
-    if value is None:
+    """dmx.output as {'device', 'port' (None: the default), 'channels':
+    {channel: [factor, ...]}}, a factor being a name from OUTPUT_FACTORS
+    (with a minus: inverted) or a number 0..255; or None."""
+    if not value:
         return None
-    if not isinstance(value, dict) or not value:
-        raise ValueError('dmx.output is {channel: function} for the DMX out')
+    if not isinstance(value, dict) or not set(value) <= {'device', 'port', 'channels'}:
+        raise ValueError('dmx.output has device, port and channels')
+    device = value.get('device') or 'pro'
+    if device not in OUTPUT_DEVICES:
+        raise ValueError(f'dmx.output.device is one of {", ".join(OUTPUT_DEVICES)}')
+    if not isinstance(value.get('channels'), dict) or not value['channels']:
+        raise ValueError('dmx.output.channels is {channel: function}')
     out = {}
-    for channel, function in value.items():
+    for channel, function in value['channels'].items():
         channel = _offset(channel, 'output')
         if channel > 512:
             raise ValueError(f'dmx.output: {channel} is not a channel 1..512')
@@ -250,15 +231,16 @@ def parse_output(value):
                     'a value 0..255, or a list of those'
                 )
         out[channel] = factors
-    return out
+    return {'device': device, 'port': value.get('port'), 'channels': out}
 
 
-def output_slots(output, master, cct):
-    """The DMX out for the faders master and cct, 0..255 (see Output above)."""
+def output_slots(channels, master, cct):
+    """The DMX out for the faders master and cct, 0..255 (see Output
+    above); `channels` as parse_output has them."""
     values = {'master': master, 'cct': cct}
     values.update({f'-{name}': 255.0 - value for name, value in values.items()})
-    data = bytearray(max(24, *output))  # the widget sends 24 slots at least
-    for channel, factors in output.items():
+    data = bytearray(max(24, *channels))  # the widget sends 24 slots at least
+    for channel, factors in channels.items():
         level = 1.0
         for f in factors:
             level *= values.get(f, f) / 255.0
@@ -531,18 +513,28 @@ class ArtnetReceiver(Receiver):
         return p[18 : 18 + length]
 
 
-def find_port(port):
-    """The serial device for dmx.port: as given, or for `auto` the one
-    USB serial device that calls itself DMX (the Enttec Pro says "DMX USB
-    PRO"), else the only USB serial device there is."""
+def find_port(port, device='pro'):
+    """The serial device for a port setting: as given, or for `auto` the
+    one USB serial device that fits. A Pro: the one that calls itself DMX
+    ... PRO ("DMX USB PRO"), else DMX, else the only one there is. An Open
+    DMX USB (a bare FTDI chip, it may not say DMX): the one that is not a
+    Pro, FTDI first."""
     if port != 'auto':
         return port
     from serial.tools import list_ports
 
+    def says(p, word):
+        return word in f'{p.product or ""} {p.description or ""}'.upper()
+
     ports = [p for p in list_ports.comports() if p.vid is not None]
-    dmx = [p for p in ports if 'DMX' in f'{p.product or ""} {p.description or ""}'.upper()]
-    pro = [p for p in dmx if 'PRO' in f'{p.product or ""} {p.description or ""}'.upper()]
-    for group in (pro, dmx, ports):
+    dmx = [p for p in ports if says(p, 'DMX')]
+    pro = [p for p in dmx if says(p, 'PRO')]
+    if device == 'open':
+        others = [p for p in ports if p not in pro]
+        groups = ([p for p in others if p.vid == FTDI_VID], others)
+    else:
+        groups = (pro, dmx, ports)
+    for group in groups:
         if len(group) == 1:
             return group[0].device
     if not ports:
@@ -551,6 +543,9 @@ def find_port(port):
         'set dmx.port to one of '
         + ', '.join(f'{p.device} ({p.product or p.description})' for p in ports)
     )
+
+
+FTDI_VID = 0x0403
 
 
 class EnttecReceiver(Receiver):
@@ -661,6 +656,48 @@ class EnttecReceiver(Receiver):
             label, payload = buf[1], bytes(buf[4 : 4 + length])
             del buf[: 5 + length]
             yield label, payload
+
+
+class OpenDmxSender(Receiver):
+    """An Enttec Open DMX USB: an FTDI chip and a line driver, no
+    processor, so the frames are made here: 250 kbaud, 8N2, a break, the
+    start code 0 and the slots, FPS times a second (a DMX line wants
+    frames all the time). send() sets the slots; nothing goes out before
+    the first. Receives nothing (frames stays 0)."""
+
+    FPS = 40.0
+
+    def __init__(self, port):
+        super().__init__()
+        self.port = port
+        self.device = None
+        self._out = None
+
+    def describe(self):
+        return f'Open DMX USB on {self.device or self.port}'
+
+    def send(self, slots):
+        self._out = bytes(slots)
+
+    def _run(self):
+        import serial
+
+        self.device = find_port(self.port, 'open')
+        with serial.Serial(
+            self.device, 250000, bytesize=8, parity='N', stopbits=2, timeout=0.5, write_timeout=1
+        ) as ser:
+            ser.rts = False  # the interface drives the line with RTS low
+            while not self._stop.is_set():
+                t0 = time.monotonic()
+                out = self._out
+                if out is not None:
+                    ser.break_condition = True  # the break: >= 88 us low
+                    time.sleep(0.0001)
+                    ser.break_condition = False  # mark after break, then the frame
+                    ser.write(b'\0' + out)
+                    ser.flush()  # all out before the next break
+                    self.error = None
+                self._stop.wait(max(0.0, 1.0 / self.FPS - (time.monotonic() - t0)))
 
 
 # --- the demo desk ---------------------------------------------------------
@@ -832,14 +869,16 @@ class Desk:
         self.first = {}
         self.touched = set()
         self.snap = False  # start: desk, first frame: the filter jumps there
-        # the DMX out (dmx.output): the input's widget, or one of its own
+        # the DMX out (dmx.output): an Open DMX USB, or a Pro: the input's
+        # widget when it is one on the same port, else one of its own
         self.output = None
-        if self.settings['output']:
-            self.output = (
-                self.receiver
-                if isinstance(self.receiver, EnttecReceiver)
-                else EnttecReceiver(self.settings['port'], receive=False).start()
-            )
+        out = self.settings['output']
+        if out and out['device'] == 'open':
+            self.output = OpenDmxSender(out['port'] or 'auto').start()
+        elif out:
+            port = out['port'] or self.settings['port']
+            shared = isinstance(self.receiver, EnttecReceiver) and self.receiver.port == port
+            self.output = self.receiver if shared else EnttecReceiver(port, receive=False).start()
 
     @property
     def on(self):
@@ -900,7 +939,7 @@ class Desk:
             faders[self.channels[n]] if self.channels[n] else self.INITIAL[n]
             for n in GLOBAL_CHANNELS
         )
-        self.output.send(output_slots(self.settings['output'], master, cct))
+        self.output.send(output_slots(self.settings['output']['channels'], master, cct))
 
     def frame(self):
         """The fixture's channel values by offset, as the lamps should
@@ -981,7 +1020,10 @@ class Desk:
             parts.append(f'{oid}: {values}')
         if self.output is not None:
             sent = self.output._out or bytes(512)
-            out = ' '.join(f'{ch}:{sent[ch - 1]}' for ch in self.settings['output'])
+            out = ' '.join(
+                f'{ch}:{sent[ch - 1] if ch <= len(sent) else 0}'
+                for ch in self.settings['output']['channels']
+            )
             parts.append(f'out {self.output.error or out}')
         return [f'{head} ({signal})', '  '.join(parts)]
 

@@ -35,6 +35,8 @@ NonNegative = Annotated[float, Field(ge=0)]
 Fraction = Annotated[float, Field(ge=0, le=1)]
 Point = Annotated[list[float], Field(min_length=2, max_length=2)]
 Channel = Annotated[int, Field(ge=1, le=512)]
+Size = Annotated[list[Annotated[int, Field(gt=0)]], Field(min_length=2, max_length=2)]
+Keystone = Annotated[list[Point], Field(min_length=4, max_length=4)]
 Rgb = Annotated[list[Annotated[int, Field(ge=0, le=255)]], Field(min_length=3, max_length=3)]
 
 
@@ -134,7 +136,7 @@ class Channels(Node):
 OutputFactor = Literal['master', 'cct', '-master', '-cct'] | Annotated[float, Field(ge=0, le=255)]
 
 
-class DmxProfile(Node):
+class DmxInProfile(Node):
     source: Literal['off', 'sacn', 'artnet', 'enttec', 'demo'] | None = None
     universe: Annotated[int, Field(ge=0, le=63999)] | None = None
     port: str | None = None  # the Enttec's serial port, or auto
@@ -143,8 +145,6 @@ class DmxProfile(Node):
     smooth: Annotated[list[NonNegative], Field(min_length=2, max_length=2)] | None = None
     channels: Channels | None = None
     start: Literal['full', 'desk'] | None = None  # full: a channel is full until it moves
-    curve: Positive | None = None  # the dimmer curve: pixel ~ fader ^ (1 / curve)
-    output: dict[Channel, OutputFactor | list[OutputFactor]] | None = None  # Enttec DMX out
 
     @field_validator('source', mode='before')
     @classmethod
@@ -153,29 +153,27 @@ class DmxProfile(Node):
         return 'off' if value is False else value
 
 
-class Dmx(DmxProfile):
-    profile: str | None = None  # the one in use; default the first
-    profiles: dict[str, DmxProfile] | None = None  # by name, each over the shared keys
+class DmxOutProfile(Node):
+    device: Literal['pro', 'open'] | None = None  # DMX USB Pro (default), or Open DMX USB
+    port: str | None = None  # the serial port, or auto; a Pro: default the input's
+    channels: dict[Channel, OutputFactor | list[OutputFactor]] | None = None
 
-    @model_validator(mode='after')
-    def known_profile(self):
-        if self.profile is not None and self.profile not in (self.profiles or {}):
-            raise ValueError(
-                f'profile {self.profile} is not one of: {", ".join(self.profiles or {}) or "-"}'
-            )
-        return self
+
+class Dmx(DmxInProfile):
+    curve: Positive | None = None  # the dimmer curve: pixel ~ fader ^ (1 / curve)
+    output: DmxOutProfile | None = None  # the DMX out
 
 
 class Config(Node):
     description: str | None = None
     language: Literal['en', 'nl'] | None = None  # of the PDF export; default en
     scale_mm_per_px: Positive
-    canvas: Annotated[list[Annotated[int, Field(gt=0)]], Field(min_length=2, max_length=2)]
+    canvas: Size
     rotation: float | None = None
     image_offset: Point | None = None
     # projector px the canvas corners move (top left, top right, bottom
     # right, bottom left): the keystone correction, step 3
-    keystone: Annotated[list[Point], Field(min_length=4, max_length=4)] | None = None
+    keystone: Keystone | None = None
     projector: Projector | None = None
     border: Border
     light: Light | None = None
@@ -191,6 +189,42 @@ class Config(Node):
         if doubles:
             raise ValueError(f'object ids must be unique: {", ".join(map(str, doubles))} twice')
         return self
+
+
+# --- the device profiles (laterna/profiles.py) ------------------------------
+# A profile file holds shared settings, `profiles` by name and `profile`, the
+# one in use; its keys land in the config (profiles.KINDS says where).
+
+
+class ProjectorProfile(Node):
+    canvas: Size | None = None
+    scale_mm_per_px: Positive | None = None
+    rotation: float | None = None
+    image_offset: Point | None = None
+    keystone: Keystone | None = None
+    position: Point | None = None  # projector.position
+    distance: Positive | None = None  # projector.distance
+    gamma: Positive | None = None
+    white: Annotated[float, Field(ge=1000, le=40000)] | None = None  # look.white
+    curve: Positive | None = None  # dmx.curve
+
+
+class ProjectorFile(ProjectorProfile):
+    profile: str | None = None
+    profiles: dict[str, ProjectorProfile | None] | None = None
+
+
+class DmxInFile(DmxInProfile):
+    profile: str | None = None
+    profiles: dict[str, DmxInProfile | None] | None = None
+
+
+class DmxOutFile(DmxOutProfile):
+    profile: str | None = None
+    profiles: dict[str, DmxOutProfile | None] | None = None
+
+
+PROFILE_FILES = {'projector': ProjectorFile, 'dmx_in': DmxInFile, 'dmx_out': DmxOutFile}
 
 
 # --- scenes.yaml -------------------------------------------------------------
@@ -288,8 +322,13 @@ class Scenes(Timing):
 def _known_keys():
     """Every key any node knows: the vocabulary for 'did you mean'."""
     keys = set()
-    for model in Node.__subclasses__() + Timing.__subclasses__() + [Timing]:
-        keys |= set(model.model_fields)
+    models, seen = [Node], set()
+    while models:  # every subclass, at any depth
+        model = models.pop()
+        if model not in seen:
+            seen.add(model)
+            keys |= set(model.model_fields)
+            models += model.__subclasses__()
     return sorted(keys)
 
 
@@ -368,11 +407,14 @@ def check_scenes(data, ids, what='scenes.yaml'):
 
 
 def write_json_schemas(folder='.'):
-    """config.schema.json and scenes.schema.json, for editors: with the
-    YAML language server, `# yaml-language-server: $schema=<file>` at the
-    top of a config.yaml or scenes.yaml gives completion and checks."""
+    """config.schema.json, scenes.schema.json and one per profile file
+    (projector, dmx-in, dmx-out), for editors: with the YAML language
+    server, `# yaml-language-server: $schema=<file>` at the top of a file
+    gives completion and checks."""
     folder = pathlib.Path(folder)
-    for name, model in (('config', Config), ('scenes', Scenes)):
+    models = [('config', Config), ('scenes', Scenes)]
+    models += [(n.replace('_', '-'), m) for n, m in PROFILE_FILES.items()]
+    for name, model in models:
         path = folder / f'{name}.schema.json'
         path.write_text(json.dumps(model.model_json_schema(), indent=2) + '\n')
         print(f'written: {path}')

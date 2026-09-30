@@ -222,7 +222,7 @@ def run(
     # the desk for the desk page; a --dmx override stays out of cfg, so S
     # never saves it
     desk = dmx.Desk(
-        {**cfg, 'dmx': {**dmx.resolve(cfg.get('dmx')), 'source': dmx_source}} if dmx_source else cfg
+        {**cfg, 'dmx': {**(cfg.get('dmx') or {}), 'source': dmx_source}} if dmx_source else cfg
     )
 
     standalone = screen is None

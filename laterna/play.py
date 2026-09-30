@@ -111,7 +111,7 @@ import numpy as np
 import pygame
 import yaml
 
-from . import dmx, faders, lamps, render, ui, video
+from . import dmx, faders, lamps, profiles, render, ui, video
 
 # the state bar in the top right corner (see the module doc): 2 x 2 px
 # blocks 2 px apart, one plus one per whole second left
@@ -255,12 +255,14 @@ def _hash_file(h, path):
 
 def _fingerprint(config, scenes_path, cfg, scenes, supersample):
     """Hash of everything the rendered scenes depend on: the two YAML files
-    (config.yaml without its dmx section, which only acts live, so the desk
-    can be set up without a re-render), the supersample factor, the bytes
+    (config.yaml with the device profiles in use laid in, laterna/profiles.py,
+    and without its dmx section, which only acts live, so the desk can be
+    set up without a re-render), the supersample factor, the bytes
     of every shape SVG and every referenced image/video, and the rendering
     code itself."""
     h = hashlib.sha256()
     settings = yaml.safe_load(pathlib.Path(config).read_text()) or {}
+    profiles.apply(settings, pathlib.Path(config).resolve().parent)
     settings.pop('dmx', None)
     h.update(yaml.safe_dump(settings, sort_keys=True).encode())
     h.update(pathlib.Path(scenes_path).read_bytes())
@@ -366,7 +368,7 @@ def run(
     _stop_worker()
     cfg = render.load_config(config)
     if dmx_source:
-        cfg['dmx'] = {**dmx.resolve(cfg.get('dmx')), 'source': dmx_source}
+        cfg['dmx'] = {**(cfg.get('dmx') or {}), 'source': dmx_source}
     data = render.load_scenes(scenes_path)
     scenes, fades = render.parse_scenes(data, cfg)
     if not scenes:
