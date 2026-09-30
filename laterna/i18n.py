@@ -449,8 +449,8 @@ TEXTS = {
         'nl': 'scènelabel aan/uit (in de projectie zelf getekend)',
     },
     'key.p_does': {
-        'en': 'state blocks top right: half, full, off',
-        'nl': 'statusblokjes rechtsboven: half, vol, uit',
+        'en': 'state blocks top right: full, half, off',
+        'nl': 'statusblokjes rechtsboven: vol, half, uit',
     },
     'legend.step_key': {
         'en': 'on a key',

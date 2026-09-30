@@ -9,7 +9,7 @@ Keys:
   < and >  (also , and .)   a picture back / on inside a slideshow
   L  scene label on/off (small, off by default; with a desk also its
      channels)
-  P  the state bars (see below): half, full, off, half, ...; half at the
+  P  the state bars (see below): full, half, off, full, ...; full at the
      start
   Tab  the desk's channels as faders across the top (hidden feature):
      they follow the desk, and can be dragged (laterna/faders.py); Tab or
@@ -128,14 +128,14 @@ TRIGGER_NONE = (90, 90, 90)  # no master trigger on this scene
 TRIGGER_FIRED = (255, 255, 255)  # the arrow after one fired
 TRIGGER_FIRED_S = 2.0  # how long that arrow shows, seconds
 # (the block in the corner, the countdown behind it) at full; they are
-# drawn at STATE_LEVELS of that (P steps on), half at the start: dark
-# enough to read from the desk without the audience noticing
+# drawn at STATE_LEVELS of that (P steps on), full at the start; half is
+# dark enough to read from the desk without the audience noticing
 STATE_FADE = ((255, 0, 0), (128, 0, 0))  # a transition runs
 STATE_HOLD = ((255, 128, 0), (128, 64, 0))  # a scene hold runs
 STATE_KEY = ((0, 255, 0), (0, 128, 0))  # waiting for a key
 STATE_DESK = ((0, 0, 255), (0, 0, 255))  # a blackout waits for the master to come up
 STATE_CLIP = ((128, 128, 128), (128, 128, 128))  # the clips' own bars, left, flat grey
-STATE_LEVELS = (0.5, 1.0, 0.0)  # half, full, off
+STATE_LEVELS = (1.0, 0.5, 0.0)  # full, half, off
 BAR_TICK_MS = 250  # redraw interval during a hold (1 px of bar)
 BAR_LADDER = (1, 2, 3, 5, 10, 15, 20, 30)  # seconds per block, then whole minutes
 # the keys that step between scenes, and how long a second press of the same
