@@ -3,10 +3,9 @@
 
 Two pages, Tab switches:
 
-  profile  the DMX in in use (dmx-in.yaml, or config.yaml `dmx:`;
-           laterna/profiles.py, switched in the app menu with I): the
-           source and its signal, the fixture's channels (absolute,
-           offset, function) with their values live
+  channels the desk as config.yaml `dmx:` has it: the source and its
+           signal, the fixture's channels (absolute, offset, function)
+           with their values live
   demo     the scenes (as Look shows them, laterna/look.py) under the
            desk's channels, with the faders on screen (laterna/faders.py):
            they follow the desk and can be dragged, or selected with 1..9
@@ -34,24 +33,20 @@ import pygame
 
 from . import dmx, faders, lamps, look, render, ui
 
-PAGES = ('profile', 'demo')
+PAGES = ('channels', 'demo')
 REPEAT = (300, 30)  # ms before the first key repeat, ms between: ~33 values/s
 TEXT = (200, 190, 170)
 DIM = (130, 120, 105)
 HAND = faders.HAND
 
 
-def profile_lines(cfg, desk):
-    """The profile page as [(text, colour)]: the DMX in and its channels
-    live."""
-    info = cfg.get('_profiles') or {}
+def channel_lines(desk):
+    """The channels page as [(text, colour)]: the source, its signal and
+    the fixture's channels live."""
     s = desk.settings
     lines = []
 
-    def where(kind):
-        return f'profile {info[kind]["name"]}' if kind in info else 'config.yaml'
-
-    lines.append((f'DMX in: {where("dmx_in")}', TEXT))
+    lines.append(('DMX in (config.yaml dmx:)', TEXT))
     lines.append(('  ' + '   '.join(desk.status_lines()[:1]), DIM))
     parts = [f'source {s["source"]}']
     if s['source'] in ('sacn', 'artnet'):
@@ -151,11 +146,11 @@ def run(
             screen.fill((0, 0, 0))
             desk.frame()  # the filter runs on
             y = 30
-            for text, colour in profile_lines(cfg, desk):
+            for text, colour in channel_lines(desk):
                 screen.blit(font.render(text, True, colour), (30, y))
                 y += 28
             if show_help:
-                hint = 'Tab demo (faders)  H help  Q quit   profile: I in the app menu'
+                hint = 'Tab demo (faders)  H help  Q quit'
                 screen.blit(font.render(hint, True, DIM), (30, y + 20))
         pygame.display.flip()
 
@@ -195,13 +190,13 @@ def run(
 
 
 def self_test(config, scenes_path):
-    """Headless check: the profile page's lines with the demo desk."""
+    """Headless check: the channels page's lines with the demo desk."""
     cfg = render.load_config(config)
     cfg['look'] = render.look_settings(cfg)
     cfg['dmx'] = {**(cfg.get('dmx') or {}), 'source': 'demo'}
     desk = dmx.Desk(cfg)
     time.sleep(0.2)
-    for text, _ in profile_lines(cfg, desk):
+    for text, _ in channel_lines(desk):
         print(text)
     desk.close()
     print('self-test ok')
@@ -215,7 +210,7 @@ def main():
     ap.add_argument(
         '--dmx', choices=dmx.SOURCES, help='override dmx.source (demo = a scripted desk)'
     )
-    ap.add_argument('--test', action='store_true', help='self-test: the profile page, no display')
+    ap.add_argument('--test', action='store_true', help='self-test: the channels page, no display')
     args = ap.parse_args()
     if args.test:
         self_test(args.config, args.scenes)

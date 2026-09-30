@@ -72,25 +72,6 @@ Q / Esc goes back: from an app to the show's menu, from there to the
 show list, from there it quits. Each app also runs on its own inside a
 show folder, e.g. `python -m laterna.play --test` for a headless self-test.
 
-## Device profiles
-
-What depends on the venue can live next to `config.yaml`, in a file per
-device, each with profiles by name and the one in use:
-
-- `projector.yaml`: canvas, scale, rotation, offset, keystone, the
-  projector's position and distance, gamma, its white, the dimmer curve
-- `dmx-in.yaml`: the desk (source, port, address, channels, ...)
-
-```yaml
-profile: theater
-profiles:
-  theater: {source: enttec, address: 101, channels: {...}}
-  test: {source: enttec, address: 1, channels: {...}}
-```
-
-The show's menu shows the profiles in use; P and I switch them. The
-apps save into the profile in use. See `laterna/profiles.py`.
-
 ## Checking a show
 
 `config.yaml` and `scenes.yaml` are checked when a show opens: unknown

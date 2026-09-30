@@ -10,12 +10,11 @@ calibrator (configure.py, per object).
 
 import copy
 import math
-import pathlib
 
 import numpy as np
 import yaml
 
-from . import profiles, render
+from . import render
 
 
 def get_object(cfg, oid):
@@ -155,9 +154,6 @@ def reset_corners(cfg, selected, snap, index=None):
 
 
 def save_config(cfg, path):
-    """config.yaml from `cfg`; what the device profiles own goes back into
-    their files (laterna/profiles.py)."""
-    data = copy.deepcopy({k: v for k, v in cfg.items() if not str(k).startswith('_')})
-    profiles.save(data, cfg.get('_profiles') or {}, pathlib.Path(path).resolve().parent)
+    data = {k: v for k, v in cfg.items() if not str(k).startswith('_')}
     with open(path, 'w') as f:
         yaml.dump(data, f, sort_keys=False, default_flow_style=None, width=100, allow_unicode=True)

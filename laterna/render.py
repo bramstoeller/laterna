@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 import yaml
 
-from . import frame, profiles, schema
+from . import frame, schema
 
 # Border profiles: cross-section of the molding as [t, height] points, t=0 at
 # the outer edge, t=1 at the inner side; height 0..1 is scaled by border.relief.
@@ -67,15 +67,10 @@ _IMAGE_CACHE = {}
 
 
 def load_config(path):
-    """config.yaml, checked, with the device profiles next to it laid in
-    (laterna/profiles.py; `_profiles` says which, for saving)."""
     path = pathlib.Path(path)
     with open(path) as f:
-        data = yaml.safe_load(f) or {}
-    info = profiles.apply(data, path.resolve().parent) if isinstance(data, dict) else {}
-    cfg = schema.check_config(data, path.name)
+        cfg = schema.check_config(yaml.safe_load(f), path.name)
     cfg['_dir'] = path.resolve().parent
-    cfg['_profiles'] = info
     return cfg
 
 

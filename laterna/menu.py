@@ -16,13 +16,8 @@ The apps, in show order:
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
   6  export            (config, cue sheet, backup and scenes as PDF, backup as pptx -> _export/)
-  7  dmx               (the desk: the profile in use, its channels live, a demo)
+  7  dmx               (the desk's channels live, and a demo with the faders)
   8  present           (play the scenes from scenes.yaml)
-
-The device profiles (projector.yaml, dmx-in.yaml, laterna/profiles.py)
-are chosen here, before the apps: the line under the title shows the
-ones in use, P / I switches to the next (saved at
-once; a projector with another canvas sets the display anew).
 
 Click a button or press its number. The apps run in this process and reuse
 the menu's fullscreen display, so there is no mode switch (no flicker):
@@ -46,7 +41,6 @@ from . import (
     export,
     look,
     play,
-    profiles,
     render,
     test_pattern,
     ui,
@@ -93,14 +87,10 @@ def show_description(folder):
         return f'unreadable: {exc}'
 
 
-def menu(
-    screen, title, subtitle, items, on_pick, quit_hint='Q goes back', status=None, on_key=None
-):
+def menu(screen, title, subtitle, items, on_pick, quit_hint='Q goes back'):
     """Buttons named `items`; on_pick(index) runs the
     choice and returns a message for the footer ('' for none), or None to
     leave the menu. Returns when Q / ESC is pressed or on_pick says so.
-    status() gives a line under the subtitle, on_key(key) handles other
-    keys (a message for the footer, or None when it does not).
 
     The layout follows the display as it is (a show may have set its own
     canvas size meanwhile), so the menus never switch the display's mode
@@ -108,7 +98,6 @@ def menu(
     items = items[:MAX_ITEMS]
     title_font = pygame.font.SysFont('monospace', 56, bold=True)
     small = pygame.font.SysFont('monospace', 26)
-    tiny = pygame.font.SysFont('monospace', 22)
     fonts = {}  # button font size -> font
     message = ''
 
@@ -117,15 +106,13 @@ def menu(
         width, height = pygame.display.get_surface().get_size()
         button_width = min(1100, width - 80)
         x = (width - button_width) // 2
-        # the buttons share the height between the title (and the status
-        # line) and the footer
-        top = 270 if status else 240
-        pitch = min(90, (height - top - 170) // max(len(items), 1))
+        # the buttons share the height between the title and the footer
+        pitch = min(90, (height - 240 - 170) // max(len(items), 1))
         size = min(40, pitch // 2)
         if size not in fonts:
             fonts[size] = pygame.font.SysFont('monospace', size)
         buttons = [
-            pygame.Rect(x, top + i * pitch, button_width, pitch - 17) for i in range(len(items))
+            pygame.Rect(x, 240 + i * pitch, button_width, pitch - 17) for i in range(len(items))
         ]
         return width, height, fonts[size], buttons
 
@@ -141,10 +128,6 @@ def menu(
                 (text.get_width() - (width - 40), 0, width - 40, text.get_height())
             )
         screen.blit(text, ((width - text.get_width()) // 2, 180))
-        line = status() if status else ''
-        if line:
-            text = tiny.render(line, True, TEXT)
-            screen.blit(text, ((width - text.get_width()) // 2, 212))
         mouse = pygame.mouse.get_pos()
         for i, (rect, name) in enumerate(zip(buttons, items)):
             hover = rect.collidepoint(mouse)
@@ -184,10 +167,6 @@ def menu(
                     return
                 if event.key in number_keys and not pick(number_keys[event.key]):
                     return
-                if on_key and event.key not in number_keys:
-                    result = on_key(event.key)
-                    if result is not None:
-                        message = result
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 for i, rect in enumerate(layout()[3]):
                     if rect.collidepoint(event.pos):
@@ -199,63 +178,21 @@ def menu(
 
 
 def app_menu(screen, folder):
-    """The apps for the show in `folder` (the working directory by now),
-    with its device profiles to switch (P / I)."""
+    """The apps for the show in `folder` (the working directory by now)."""
     caption = f'{ui.APP_NAME} — {folder.name}'
-    state = {'info': {}, 'error': ''}
-
-    def reload():
-        """The profiles in use again; the display follows the projector's
-        canvas. Returns an error for the footer, '' when fine."""
-        try:
-            cfg = render.load_config(folder / 'config.yaml')
-        except Exception as exc:
-            state['error'] = 'config broken'
-            return str(exc)
-        state['info'], state['error'] = cfg['_profiles'], ''
-        canvas = tuple(cfg['canvas'])
-        if pygame.display.get_surface().get_size() != canvas:
-            ui.set_canvas(canvas)
-        return ''
 
     def launch(index):
         module = APPS[index][1]
         try:
-            module.run(pygame.display.get_surface())
+            module.run(screen)
             message = ''
         except Exception as exc:
             message = f'{module.__name__}: {exc}'
         pygame.display.set_caption(caption)
-        return reload() or message
-
-    def status():
-        return state['error'] or profiles.summary(state['info'])
-
-    def on_key(key):
-        kind = next((k for k in profiles.KINDS if pygame.key.name(key) == k.key), None)
-        if kind is None:
-            return None
-        if kind.name not in state['info']:
-            return f'no {kind.file} in this show' if not state['error'] else None
-        name = profiles.cycle(folder, kind, state['info'])
-        return reload() or f'{kind.label}: {name}'
+        return message
 
     pygame.display.set_caption(caption)
-    reload()
-    hint = 'Q goes back'
-    if state['info']:
-        keys = ' / '.join(k.key.upper() for k in profiles.KINDS if k.name in state['info'])
-        hint = f'{keys} switches a profile — {hint}'
-    menu(
-        screen,
-        folder.name,
-        show_description(folder),
-        [name for name, _ in APPS],
-        launch,
-        quit_hint=hint,
-        status=status,
-        on_key=on_key,
-    )
+    menu(screen, folder.name, show_description(folder), [name for name, _ in APPS], launch)
 
 
 def root_folder():
@@ -286,7 +223,7 @@ def main():
         except Exception as exc:
             return f'{folder.name}: {exc}'
         canvas = tuple(cfg['canvas'])
-        if pygame.display.get_surface().get_size() != canvas:
+        if screen.get_size() != canvas:
             screen = ui.set_canvas(canvas)
         os.chdir(folder)  # config.yaml, scenes.yaml, media and caches resolve here
         try:
