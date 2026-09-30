@@ -64,20 +64,6 @@ from its first frame, taken over at once (no fade from full): for a show
 whose dark comes from the desk, which starts with the master at 0. When
 the signal stops the last frame holds (a DMX receiver never blacks out
 by itself).
-Output (`dmx.output`, in a show usually from dmx-out.yaml,
-laterna/profiles.py): a DMX out sends real lamps the faders: the desk's,
-or the hand's where the on-screen faders took over, as they stand (no
-dimmer curve, no smoothing: a lamp has its own). `device` is `pro` (the
-default: an Enttec DMX USB Pro, on `port`; without one the input's, so
-one widget does both) or `open` (an Enttec Open DMX USB, a bare FTDI
-chip: laterna makes every frame itself, 40 a second). `channels` gives
-each channel a function: a fader, master or cct, inverted with a minus
-(-cct = 255 - cct), or a fixed value 0..255, or a list of those
-multiplied (each as 0..1): `{10: master, 11: [master, -cct]}` gives a
-white that follows the master and an amber that follows it more the
-warmer the cct. Channels are absolute on the out line; every other slot
-is 0. Before the desk's first frame the faders stand full, as the
-projection does.
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
 that the cable and the patch are right.
 """
@@ -100,10 +86,7 @@ DEFAULTS = {
     'smooth': [0.04, 0.08],
     'start': 'full',
     'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
-    'output': None,  # {device, port, channels}: the DMX out
 }
-OUTPUT_DEVICES = ('pro', 'open')
-OUTPUT_FACTORS = ('master', 'cct')  # -name: 255 - it
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
 GLOBAL_CHANNELS = ('master', 'cct')
 OBJECT_CHANNELS = ('canvas', 'frame', 'power')
@@ -169,8 +152,7 @@ def channel_span(channels):
 
 
 def settings(cfg):
-    """cfg['dmx'] completed with DEFAULTS and checked; `channels` and
-    `output` parsed."""
+    """cfg['dmx'] completed with DEFAULTS and checked; `channels` parsed."""
     dmx = {**DEFAULTS, **(cfg.get('dmx') or {})}
     if dmx['source'] not in SOURCES:
         raise ValueError(f'dmx.source is one of {", ".join(SOURCES)}')
@@ -199,53 +181,7 @@ def settings(cfg):
         raise ValueError('dmx.curve is a positive number (2.2: half the fader, half the light)')
     if dmx['start'] not in ('full', 'desk'):
         raise ValueError('dmx.start is full (a channel is full until it moves) or desk')
-    dmx['output'] = parse_output(dmx['output'])
     return dmx
-
-
-def parse_output(value):
-    """dmx.output as {'device', 'port' (None: the default), 'channels':
-    {channel: [factor, ...]}}, a factor being a name from OUTPUT_FACTORS
-    (with a minus: inverted) or a number 0..255; or None."""
-    if not value:
-        return None
-    if not isinstance(value, dict) or not set(value) <= {'device', 'port', 'channels'}:
-        raise ValueError('dmx.output has device, port and channels')
-    device = value.get('device') or 'pro'
-    if device not in OUTPUT_DEVICES:
-        raise ValueError(f'dmx.output.device is one of {", ".join(OUTPUT_DEVICES)}')
-    if not isinstance(value.get('channels'), dict) or not value['channels']:
-        raise ValueError('dmx.output.channels is {channel: function}')
-    out = {}
-    for channel, function in value['channels'].items():
-        channel = _offset(channel, 'output')
-        if channel > 512:
-            raise ValueError(f'dmx.output: {channel} is not a channel 1..512')
-        factors = function if isinstance(function, list) else [function]
-        for f in factors:
-            if str(f).removeprefix('-') not in OUTPUT_FACTORS and not (
-                isinstance(f, (int, float)) and not isinstance(f, bool) and 0 <= f <= 255
-            ):
-                raise ValueError(
-                    f'dmx.output.{channel}: {", ".join(OUTPUT_FACTORS)} (-name: 255 - it), '
-                    'a value 0..255, or a list of those'
-                )
-        out[channel] = factors
-    return {'device': device, 'port': value.get('port'), 'channels': out}
-
-
-def output_slots(channels, master, cct):
-    """The DMX out for the faders master and cct, 0..255 (see Output
-    above); `channels` as parse_output has them."""
-    values = {'master': master, 'cct': cct}
-    values.update({f'-{name}': 255.0 - value for name, value in values.items()})
-    data = bytearray(max(24, *channels))  # the widget sends 24 slots at least
-    for channel, factors in channels.items():
-        level = 1.0
-        for f in factors:
-            level *= values.get(f, f) / 255.0
-        data[channel - 1] = round(255.0 * min(max(level, 0.0), 1.0))
-    return bytes(data)
 
 
 def parse_smooth(value):
@@ -513,28 +449,18 @@ class ArtnetReceiver(Receiver):
         return p[18 : 18 + length]
 
 
-def find_port(port, device='pro'):
-    """The serial device for a port setting: as given, or for `auto` the
-    one USB serial device that fits. A Pro: the one that calls itself DMX
-    ... PRO ("DMX USB PRO"), else DMX, else the only one there is. An Open
-    DMX USB (a bare FTDI chip, it may not say DMX): the one that is not a
-    Pro, FTDI first."""
+def find_port(port):
+    """The serial device for dmx.port: as given, or for `auto` the one
+    USB serial device that calls itself DMX (the Enttec Pro says "DMX USB
+    PRO"), else the only USB serial device there is."""
     if port != 'auto':
         return port
     from serial.tools import list_ports
 
-    def says(p, word):
-        return word in f'{p.product or ""} {p.description or ""}'.upper()
-
     ports = [p for p in list_ports.comports() if p.vid is not None]
-    dmx = [p for p in ports if says(p, 'DMX')]
-    pro = [p for p in dmx if says(p, 'PRO')]
-    if device == 'open':
-        others = [p for p in ports if p not in pro]
-        groups = ([p for p in others if p.vid == FTDI_VID], others)
-    else:
-        groups = (pro, dmx, ports)
-    for group in groups:
+    dmx = [p for p in ports if 'DMX' in f'{p.product or ""} {p.description or ""}'.upper()]
+    pro = [p for p in dmx if 'PRO' in f'{p.product or ""} {p.description or ""}'.upper()]
+    for group in (pro, dmx, ports):
         if len(group) == 1:
             return group[0].device
     if not ports:
@@ -545,46 +471,19 @@ def find_port(port, device='pro'):
     )
 
 
-FTDI_VID = 0x0403
-
-
 class EnttecReceiver(Receiver):
     """The Enttec DMX USB Pro widget protocol: messages 7E label lenLSB
     lenMSB data E7. The widget sends label 5 per received frame (status,
     start code, slots); label 9 (changed slots only) is decoded too, in
-    case a widget was left in that mode. send() puts slots on the widget's
-    DMX out (label 6; the widget repeats the last ones by itself). With
-    receive False it only sends (dmx.output with another source)."""
+    case a widget was left in that mode."""
 
     START, END = 0x7E, 0xE7
-    RECEIVED, SEND, RECEIVE_MODE, CHANGED = 5, 6, 8, 9
+    RECEIVED, RECEIVE_MODE, CHANGED = 5, 8, 9
 
-    def __init__(self, port, receive=True):
+    def __init__(self, port):
         super().__init__()
         self.port = port
-        self.receive = receive
         self.device = None
-        self._ser = None
-        self._out_lock = threading.Lock()
-        self._out = self._sent = None  # the slots to send, the ones sent
-
-    @classmethod
-    def message(cls, label, payload):
-        n = len(payload)
-        return bytes([cls.START, label, n & 0xFF, n >> 8]) + payload + bytes([cls.END])
-
-    def send(self, slots):
-        """Put `slots` on the DMX out (once the widget is open, and only
-        when they change)."""
-        with self._out_lock:
-            self._out = bytes(slots)
-            if self._ser is None or self._out == self._sent:
-                return
-            try:
-                self._ser.write(self.message(self.SEND, b'\0' + self._out))
-                self._sent = self._out
-            except Exception as e:  # noqa: BLE001 - unplugged: _run reconnects
-                self.error = str(e)
 
     def describe(self):
         return f'Enttec widget on {self.device or self.port}'
@@ -595,41 +494,29 @@ class EnttecReceiver(Receiver):
         self.device = find_port(self.port)
         frame = bytearray(513)  # start code + slots, kept for label 9 deltas
         with serial.Serial(self.device, 115200, timeout=0.5) as ser:
-            if self.receive:
-                # every frame please (also resets a widget left in on-change mode)
-                ser.write(self.message(self.RECEIVE_MODE, b'\0'))
-            with self._out_lock:
-                self._ser, self._sent = ser, None
-            if self._out is not None:
-                self.send(self._out)
-            try:
-                self._receive(ser, frame)
-            finally:
-                with self._out_lock:
-                    self._ser = None
-
-    def _receive(self, ser, frame):
-        buf = bytearray()
-        while not self._stop.is_set():
-            chunk = ser.read(1)  # also notices an unplugged widget when only sending
-            if not chunk or not self.receive:
-                continue
-            buf += chunk + ser.read(ser.in_waiting)
-            for label, payload in self.messages(buf):
-                if label == self.RECEIVED:
-                    if len(payload) < 2 or payload[0] != 0 or payload[1] != 0:
-                        continue  # overflow/overrun, or not dimmer data
-                    frame[: len(payload) - 1] = payload[1:]
-                    self._set(frame[1:])
-                elif label == self.CHANGED and len(payload) >= 6:
-                    start, bits, changed = payload[0], payload[1:6], payload[6:]
-                    k = 0
-                    for b in range(40):
-                        if bits[b >> 3] >> (b & 7) & 1 and k < len(changed):
-                            if start * 8 + b < 513:
-                                frame[start * 8 + b] = changed[k]
-                            k += 1
-                    self._set(frame[1:])
+            # every frame please (also resets a widget left in on-change mode)
+            ser.write(bytes([self.START, self.RECEIVE_MODE, 1, 0, 0, self.END]))
+            buf = bytearray()
+            while not self._stop.is_set():
+                chunk = ser.read(1)
+                if not chunk:
+                    continue
+                buf += chunk + ser.read(ser.in_waiting)
+                for label, payload in self.messages(buf):
+                    if label == self.RECEIVED:
+                        if len(payload) < 2 or payload[0] != 0 or payload[1] != 0:
+                            continue  # overflow/overrun, or not dimmer data
+                        frame[: len(payload) - 1] = payload[1:]
+                        self._set(frame[1:])
+                    elif label == self.CHANGED and len(payload) >= 6:
+                        start, bits, changed = payload[0], payload[1:6], payload[6:]
+                        k = 0
+                        for b in range(40):
+                            if bits[b >> 3] >> (b & 7) & 1 and k < len(changed):
+                                if start * 8 + b < 513:
+                                    frame[start * 8 + b] = changed[k]
+                                k += 1
+                        self._set(frame[1:])
 
     @classmethod
     def messages(cls, buf):
@@ -656,48 +543,6 @@ class EnttecReceiver(Receiver):
             label, payload = buf[1], bytes(buf[4 : 4 + length])
             del buf[: 5 + length]
             yield label, payload
-
-
-class OpenDmxSender(Receiver):
-    """An Enttec Open DMX USB: an FTDI chip and a line driver, no
-    processor, so the frames are made here: 250 kbaud, 8N2, a break, the
-    start code 0 and the slots, FPS times a second (a DMX line wants
-    frames all the time). send() sets the slots; nothing goes out before
-    the first. Receives nothing (frames stays 0)."""
-
-    FPS = 40.0
-
-    def __init__(self, port):
-        super().__init__()
-        self.port = port
-        self.device = None
-        self._out = None
-
-    def describe(self):
-        return f'Open DMX USB on {self.device or self.port}'
-
-    def send(self, slots):
-        self._out = bytes(slots)
-
-    def _run(self):
-        import serial
-
-        self.device = find_port(self.port, 'open')
-        with serial.Serial(
-            self.device, 250000, bytesize=8, parity='N', stopbits=2, timeout=0.5, write_timeout=1
-        ) as ser:
-            ser.rts = False  # the interface drives the line with RTS low
-            while not self._stop.is_set():
-                t0 = time.monotonic()
-                out = self._out
-                if out is not None:
-                    ser.break_condition = True  # the break: >= 88 us low
-                    time.sleep(0.0001)
-                    ser.break_condition = False  # mark after break, then the frame
-                    ser.write(b'\0' + out)
-                    ser.flush()  # all out before the next break
-                    self.error = None
-                self._stop.wait(max(0.0, 1.0 / self.FPS - (time.monotonic() - t0)))
 
 
 # --- the demo desk ---------------------------------------------------------
@@ -837,8 +682,6 @@ class Desk:
     at its initial value until the desk changes it (see `first`), unless
     dmx.start is desk."""
 
-    INITIAL = {'master': 255.0, 'cct': 128.0}  # without the channel: as rendered
-
     def __init__(self, cfg, receiver=None):
         from . import render
 
@@ -869,16 +712,6 @@ class Desk:
         self.first = {}
         self.touched = set()
         self.snap = False  # start: desk, first frame: the filter jumps there
-        # the DMX out (dmx.output): an Open DMX USB, or a Pro: the input's
-        # widget when it is one on the same port, else one of its own
-        self.output = None
-        out = self.settings['output']
-        if out and out['device'] == 'open':
-            self.output = OpenDmxSender(out['port'] or 'auto').start()
-        elif out:
-            port = out['port'] or self.settings['port']
-            shared = isinstance(self.receiver, EnttecReceiver) and self.receiver.port == port
-            self.output = self.receiver if shared else EnttecReceiver(port, receive=False).start()
 
     @property
     def on(self):
@@ -887,8 +720,6 @@ class Desk:
     def close(self):
         if self.receiver is not None:
             self.receiver.stop()
-        if self.output is not None and self.output is not self.receiver:
-            self.output.stop()
 
     @property
     def receiving(self):
@@ -931,21 +762,10 @@ class Desk:
                 targets[offset] = value
         return targets
 
-    def send_output(self, faders):
-        """The faders to the DMX out, if there is one."""
-        if self.output is None:
-            return
-        master, cct = (
-            faders[self.channels[n]] if self.channels[n] else self.INITIAL[n]
-            for n in GLOBAL_CHANNELS
-        )
-        self.output.send(output_slots(self.settings['output']['channels'], master, cct))
-
     def frame(self):
         """The fixture's channel values by offset, as the lamps should
-        follow them now: the faders, filtered. Sends the DMX out along."""
+        follow them now: the faders, filtered."""
         targets = self.faders()
-        self.send_output(targets)
         if self.smooth and self.snap:
             self.smooth.values.update(targets)
             self.snap = False
@@ -1018,13 +838,6 @@ class Desk:
                 f'{self._value(data, spec[n]):.0f}' for n in OBJECT_CHANNELS if n in spec
             )
             parts.append(f'{oid}: {values}')
-        if self.output is not None:
-            sent = self.output._out or bytes(512)
-            out = ' '.join(
-                f'{ch}:{sent[ch - 1] if ch <= len(sent) else 0}'
-                for ch in self.settings['output']['channels']
-            )
-            parts.append(f'out {self.output.error or out}')
         return [f'{head} ({signal})', '  '.join(parts)]
 
     def status(self):

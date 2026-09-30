@@ -1,19 +1,18 @@
 #!/usr/bin/env python
-"""DMX: the light desk and the lamps on a DMX out, step 7.
+"""DMX: the light desk, step 7.
 
 Two pages, Tab switches:
 
-  profile  the DMX in and out in use (dmx-in.yaml / dmx-out.yaml, or
-           config.yaml `dmx:`; laterna/profiles.py, switched in the app
-           menu with I / O): the source and its signal, the fixture's
-           channels (absolute, offset, function) with their values live,
-           and per DMX out channel its function and what goes out
+  profile  the DMX in in use (dmx-in.yaml, or config.yaml `dmx:`;
+           laterna/profiles.py, switched in the app menu with I): the
+           source and its signal, the fixture's channels (absolute,
+           offset, function) with their values live
   demo     the scenes (as Look shows them, laterna/look.py) under the
            desk's channels, with the faders on screen (laterna/faders.py):
            they follow the desk and can be dragged, or selected with 1..9
            and nudged with up/down (held down the key repeats, so the
            fader slides; with Shift five times as fast); left / right
-           steps through the scenes. The faders drive the DMX out too
+           steps through the scenes
 
 Nothing is saved here: it is there to check the cable and the patch and
 to try the faders, from the desk, the keys or the mouse.
@@ -42,14 +41,9 @@ DIM = (130, 120, 105)
 HAND = faders.HAND
 
 
-def function_label(factors):
-    """An output channel's function as written: master x -cct."""
-    return ' x '.join(f'{f:g}' if isinstance(f, (int, float)) else str(f) for f in factors)
-
-
 def profile_lines(cfg, desk):
-    """The profile page as [(text, colour)]: the DMX in, its channels
-    live, the DMX out."""
+    """The profile page as [(text, colour)]: the DMX in and its channels
+    live."""
     info = cfg.get('_profiles') or {}
     s = desk.settings
     lines = []
@@ -79,21 +73,6 @@ def profile_lines(cfg, desk):
                 HAND if hand else TEXT,
             )
         )
-    lines.append(('', DIM))
-    out = s['output']
-    if not out:
-        lines.append((f'DMX out: none ({where("dmx_out")})', TEXT))
-        return lines
-    lines.append((f'DMX out: {where("dmx_out")}', TEXT))
-    device = desk.output
-    state = device.error or ('sending' if device._out is not None else 'waiting')
-    lines.append((f'  {device.describe()}: {state}', DIM))
-    lines.append(('', DIM))
-    lines.append(('  channel  function                 value', TEXT))
-    sent = device._out or b''
-    for channel, factors in out['channels'].items():
-        value = sent[channel - 1] if channel <= len(sent) else 0
-        lines.append((f'  {channel:>7d}  {function_label(factors):<24s} {value:>5d}', TEXT))
     return lines
 
 
@@ -170,13 +149,13 @@ def run(
                 ui.draw_help(screen, font, lines, top=top + 20)
         else:
             screen.fill((0, 0, 0))
-            desk.frame()  # the filter runs on, and the DMX out follows the faders
+            desk.frame()  # the filter runs on
             y = 30
             for text, colour in profile_lines(cfg, desk):
                 screen.blit(font.render(text, True, colour), (30, y))
                 y += 28
             if show_help:
-                hint = 'Tab demo (faders)  H help  Q quit   profiles: I / O in the app menu'
+                hint = 'Tab demo (faders)  H help  Q quit   profile: I in the app menu'
                 screen.blit(font.render(hint, True, DIM), (30, y + 20))
         pygame.display.flip()
 
@@ -229,7 +208,7 @@ def self_test(config, scenes_path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='The light desk and the DMX out: channels and a demo')
+    ap = argparse.ArgumentParser(description="The light desk's channels live, and a demo")
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--scenes', default='scenes.yaml')
     ap.add_argument('--supersample', type=int, default=3)

@@ -65,8 +65,7 @@ In show order, each saving what it sets to `config.yaml`:
 5. **Look**: brightness per layer, spotlights, colour temperature
 6. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF,
    and the backup as slides with fades and holds (`<show>.pptx`)
-7. **DMX**: the desk's channels and the DMX out live, and a demo with
-   faders on screen
+7. **DMX**: the desk's channels live, and a demo with faders on screen
 8. **Present**: play the scenes from `scenes.yaml`
 
 Q / Esc goes back: from an app to the show's menu, from there to the
@@ -81,8 +80,6 @@ device, each with profiles by name and the one in use:
 - `projector.yaml`: canvas, scale, rotation, offset, keystone, the
   projector's position and distance, gamma, its white, the dimmer curve
 - `dmx-in.yaml`: the desk (source, port, address, channels, ...)
-- `dmx-out.yaml`: lamps on a DMX out (an Enttec DMX USB Pro or Open DMX
-  USB, and per channel a function of the master and cct)
 
 ```yaml
 profile: theater
@@ -91,7 +88,7 @@ profiles:
   test: {source: enttec, address: 1, channels: {...}}
 ```
 
-The show's menu shows the profiles in use; P, I and O switch them. The
+The show's menu shows the profiles in use; P and I switch them. The
 apps save into the profile in use. See `laterna/profiles.py`.
 
 ## Checking a show

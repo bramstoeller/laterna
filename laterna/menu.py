@@ -16,12 +16,12 @@ The apps, in show order:
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
   6  export            (config, cue sheet, backup and scenes as PDF, backup as pptx -> _export/)
-  7  dmx               (the desk and the lamps: the profile in use, its channels live, a demo)
+  7  dmx               (the desk: the profile in use, its channels live, a demo)
   8  present           (play the scenes from scenes.yaml)
 
-The device profiles (projector.yaml, dmx-in.yaml, dmx-out.yaml,
-laterna/profiles.py) are chosen here, before the apps: the line under
-the title shows the ones in use, P / I / O switches to the next (saved at
+The device profiles (projector.yaml, dmx-in.yaml, laterna/profiles.py)
+are chosen here, before the apps: the line under the title shows the
+ones in use, P / I switches to the next (saved at
 once; a projector with another canvas sets the display anew).
 
 Click a button or press its number. The apps run in this process and reuse
@@ -200,7 +200,7 @@ def menu(
 
 def app_menu(screen, folder):
     """The apps for the show in `folder` (the working directory by now),
-    with its device profiles to switch (P / I / O)."""
+    with its device profiles to switch (P / I)."""
     caption = f'{ui.APP_NAME} — {folder.name}'
     state = {'info': {}, 'error': ''}
 

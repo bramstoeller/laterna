@@ -1,4 +1,4 @@
-"""Device profiles: the projector, the DMX in and the DMX out, a file each.
+"""Device profiles: the projector and the DMX in, a file each.
 
 A show can keep what depends on the venue out of its config.yaml, in
 files next to it:
@@ -9,8 +9,6 @@ files next to it:
                   dimmer curve, dmx.curve)
   dmx-in.yaml     the desk: source, universe, port, address, channels,
                   cct, smooth, start (of `dmx:`)
-  dmx-out.yaml    the lamps on a DMX out: device (pro or open), port,
-                  channels (dmx.output, laterna/dmx.py)
 
 Each file holds shared settings at the top, `profiles` by name (each
 laid over the shared ones: a key it sets wins) and `profile`, the one in
@@ -22,13 +20,13 @@ use (default the first):
     theater: {source: enttec, address: 101, channels: {...}}
     test: {source: enttec, address: 1, channels: {...}}
 
-DMX in and out can always be switched `off` too (no desk, no lamps),
-without a profile for it. render.load_config lays the chosen profiles
+The DMX in can always be switched `off` too (no desk), without a
+profile for it. render.load_config lays the chosen profiles
 into the config, so the apps read cfg['canvas'] as ever; a key a file
 owns must then not be in config.yaml as well. calibration.save_config
 writes what an app changed back where it came from (the profile, or the
 shared part), so global alignment saves the keystone into the profile
-in use. The app menu shows the profiles and switches them (P / I / O),
+in use. The app menu shows the profiles and switches them (P / I),
 changing only the `profile:` line, so the file keeps its comments.
 Without these files everything stays in config.yaml, as before.
 """
@@ -81,15 +79,7 @@ DMX_IN = Kind(
     {k: ('dmx', k) for k in DMX_IN_KEYS},
     off={'source': 'off'},
 )
-DMX_OUT = Kind(
-    'dmx_out',
-    'dmx-out.yaml',
-    'dmx out',
-    'o',
-    {k: ('dmx', 'output', k) for k in ('device', 'port', 'channels')},
-    off={},
-)
-KINDS = (PROJECTOR, DMX_IN, DMX_OUT)
+KINDS = (PROJECTOR, DMX_IN)
 BY_NAME = {k.name: k for k in KINDS}
 
 
@@ -247,7 +237,7 @@ def cycle(folder, kind, info):
 
 
 def summary(info):
-    """'projector theater   dmx in test   dmx out off' for the menu; '' without files."""
+    """'P projector: theater   I dmx in: test' for the menu; '' without files."""
     return '   '.join(
         f'{kind.key.upper()} {kind.label}: {info[kind.name]["name"]}'
         for kind in KINDS

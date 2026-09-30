@@ -131,11 +131,6 @@ class Channels(Node):
     objects: dict[int | str, ObjectChannels] | None = None  # by object id or name
 
 
-# a DMX out channel's function: a fader (-name: 255 - it), a fixed value,
-# or a list of those multiplied
-OutputFactor = Literal['master', 'cct', '-master', '-cct'] | Annotated[float, Field(ge=0, le=255)]
-
-
 class DmxInProfile(Node):
     source: Literal['off', 'sacn', 'artnet', 'enttec', 'demo'] | None = None
     universe: Annotated[int, Field(ge=0, le=63999)] | None = None
@@ -153,15 +148,8 @@ class DmxInProfile(Node):
         return 'off' if value is False else value
 
 
-class DmxOutProfile(Node):
-    device: Literal['pro', 'open'] | None = None  # DMX USB Pro (default), or Open DMX USB
-    port: str | None = None  # the serial port, or auto; a Pro: default the input's
-    channels: dict[Channel, OutputFactor | list[OutputFactor]] | None = None
-
-
 class Dmx(DmxInProfile):
     curve: Positive | None = None  # the dimmer curve: pixel ~ fader ^ (1 / curve)
-    output: DmxOutProfile | None = None  # the DMX out
 
 
 class Config(Node):
@@ -219,12 +207,7 @@ class DmxInFile(DmxInProfile):
     profiles: dict[str, DmxInProfile | None] | None = None
 
 
-class DmxOutFile(DmxOutProfile):
-    profile: str | None = None
-    profiles: dict[str, DmxOutProfile | None] | None = None
-
-
-PROFILE_FILES = {'projector': ProjectorFile, 'dmx_in': DmxInFile, 'dmx_out': DmxOutFile}
+PROFILE_FILES = {'projector': ProjectorFile, 'dmx_in': DmxInFile}
 
 
 # --- scenes.yaml -------------------------------------------------------------
@@ -408,7 +391,7 @@ def check_scenes(data, ids, what='scenes.yaml'):
 
 def write_json_schemas(folder='.'):
     """config.schema.json, scenes.schema.json and one per profile file
-    (projector, dmx-in, dmx-out), for editors: with the YAML language
+    (projector, dmx-in), for editors: with the YAML language
     server, `# yaml-language-server: $schema=<file>` at the top of a file
     gives completion and checks."""
     folder = pathlib.Path(folder)
