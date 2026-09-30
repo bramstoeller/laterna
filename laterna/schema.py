@@ -129,9 +129,9 @@ class Channels(Node):
     objects: dict[int | str, ObjectChannels] | None = None  # by object id or name
 
 
-class Output(Node):
-    white: Channel
-    amber: Channel
+# a DMX out channel's function: a fader (-name: 255 - it), a fixed value,
+# or a list of those multiplied
+OutputFactor = Literal['master', 'cct', '-master', '-cct'] | Annotated[float, Field(ge=0, le=255)]
 
 
 class Dmx(Node):
@@ -144,7 +144,7 @@ class Dmx(Node):
     channels: Channels | None = None
     start: Literal['full', 'desk'] | None = None  # full: a channel is full until it moves
     curve: Positive | None = None  # the dimmer curve: pixel ~ fader ^ (1 / curve)
-    output: Output | None = None  # Enttec DMX out: white = master, amber = x (255 - cct)
+    output: dict[Channel, OutputFactor | list[OutputFactor]] | None = None  # Enttec DMX out
 
     @field_validator('source', mode='before')
     @classmethod

@@ -64,12 +64,18 @@ from its first frame, taken over at once (no fade from full): for a show
 whose dark comes from the desk, which starts with the master at 0. When
 the signal stops the last frame holds (a DMX receiver never blacks out
 by itself).
-Output (`dmx.output`, enttec only): the widget's DMX out drives a lamp
-of its own with each frame that comes in: `white` gets the master,
-`amber` master x (255 - cct) / 255 (warm = more amber), both as the desk
-sends them (no dimmer curve, no smoothing: the lamp has its own; the
-faders by hand do not reach it). Absolute channels on the out line,
-every other slot 0.
+Output (`dmx.output`, {channel: function}): the Enttec's DMX out (on
+`port`, shared with the input for source enttec, opened for output only
+with any other source) sends real lamps the faders: the desk's, or the
+hand's where the on-screen faders took over, as they stand (no dimmer
+curve, no smoothing: a lamp has its own). A channel's function is a
+fader, master or cct, inverted with a minus (-cct = 255 - cct), or a
+fixed value 0..255, or a list of those multiplied (each as 0..1):
+`{10: master, 11: [master, -cct]}` gives a white that follows the master
+and an amber that follows it more the warmer the cct. Channels are absolute on the out line; every
+other slot is 0.
+Before the desk's first frame the faders stand full, as the projection
+does.
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
 that the cable and the patch are right.
 """
@@ -92,9 +98,9 @@ DEFAULTS = {
     'smooth': [0.04, 0.08],
     'start': 'full',
     'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
-    'output': None,  # {white: channel, amber: channel} on the Enttec's DMX out
+    'output': None,  # {channel: function} on the Enttec's DMX out
 }
-OUTPUT_CHANNELS = ('white', 'amber')
+OUTPUT_FACTORS = ('master', 'cct')  # -name: 255 - it
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
 GLOBAL_CHANNELS = ('master', 'cct')
 OBJECT_CHANNELS = ('canvas', 'frame', 'power')
@@ -189,39 +195,45 @@ def settings(cfg):
         raise ValueError('dmx.curve is a positive number (2.2: half the fader, half the light)')
     if dmx['start'] not in ('full', 'desk'):
         raise ValueError('dmx.start is full (a channel is full until it moves) or desk')
-    dmx['output'] = parse_output(dmx)
+    dmx['output'] = parse_output(dmx['output'])
     return dmx
 
 
-def parse_output(dmx):
-    """dmx.output as {'white': channel, 'amber': channel}, or None."""
-    value = dmx['output']
+def parse_output(value):
+    """dmx.output as {channel: [factor, ...]}, a factor being a name from
+    OUTPUT_FACTORS (with a minus: inverted) or a number 0..255; or None."""
     if value is None:
         return None
-    if not isinstance(value, dict) or set(value) != set(OUTPUT_CHANNELS):
-        raise ValueError('dmx.output has white and amber (channels on the DMX out)')
-    if dmx['source'] != 'enttec':
-        raise ValueError('dmx.output needs dmx.source enttec')
-    if not (dmx['channels']['master'] and dmx['channels']['cct']):
-        raise ValueError('dmx.output needs the master and cct channels')
+    if not isinstance(value, dict) or not value:
+        raise ValueError('dmx.output is {channel: function} for the DMX out')
     out = {}
-    for name in OUTPUT_CHANNELS:
-        channel = _offset(value[name], f'output.{name}')
+    for channel, function in value.items():
+        channel = _offset(channel, 'output')
         if channel > 512:
-            raise ValueError(f'dmx.output.{name} is a channel 1..512')
-        out[name] = channel
+            raise ValueError(f'dmx.output: {channel} is not a channel 1..512')
+        factors = function if isinstance(function, list) else [function]
+        for f in factors:
+            if str(f).removeprefix('-') not in OUTPUT_FACTORS and not (
+                isinstance(f, (int, float)) and not isinstance(f, bool) and 0 <= f <= 255
+            ):
+                raise ValueError(
+                    f'dmx.output.{channel}: {", ".join(OUTPUT_FACTORS)} (-name: 255 - it), '
+                    'a value 0..255, or a list of those'
+                )
+        out[channel] = factors
     return out
 
 
-def output_slots(dmx, slots):
-    """The DMX out for a frame from the desk (see Output above)."""
-    out, channels = dmx['output'], dmx['channels']
-    first = dmx['address'] - 1
-    dim = slots[first + channels['master'] - 1]
-    cct = slots[first + channels['cct'] - 1]
-    data = bytearray(max(24, *out.values()))  # the widget sends 24 slots at least
-    data[out['white'] - 1] = dim
-    data[out['amber'] - 1] = round(dim * (255 - cct) / 255)
+def output_slots(output, master, cct):
+    """The DMX out for the faders master and cct, 0..255 (see Output above)."""
+    values = {'master': master, 'cct': cct}
+    values.update({f'-{name}': 255.0 - value for name, value in values.items()})
+    data = bytearray(max(24, *output))  # the widget sends 24 slots at least
+    for channel, factors in output.items():
+        level = 1.0
+        for f in factors:
+            level *= values.get(f, f) / 255.0
+        data[channel - 1] = round(255.0 * min(max(level, 0.0), 1.0))
     return bytes(data)
 
 
@@ -516,30 +528,39 @@ class EnttecReceiver(Receiver):
     """The Enttec DMX USB Pro widget protocol: messages 7E label lenLSB
     lenMSB data E7. The widget sends label 5 per received frame (status,
     start code, slots); label 9 (changed slots only) is decoded too, in
-    case a widget was left in that mode."""
+    case a widget was left in that mode. send() puts slots on the widget's
+    DMX out (label 6; the widget repeats the last ones by itself). With
+    receive False it only sends (dmx.output with another source)."""
 
     START, END = 0x7E, 0xE7
     RECEIVED, SEND, RECEIVE_MODE, CHANGED = 5, 6, 8, 9
 
-    def __init__(self, port, output=None):
+    def __init__(self, port, receive=True):
         super().__init__()
         self.port = port
-        self.output = output  # received slots -> the DMX out's slots, or None
+        self.receive = receive
         self.device = None
-        self.ser = self.sent = None
+        self._ser = None
+        self._out_lock = threading.Lock()
+        self._out = self._sent = None  # the slots to send, the ones sent
 
     @classmethod
     def message(cls, label, payload):
         n = len(payload)
         return bytes([cls.START, label, n & 0xFF, n >> 8]) + payload + bytes([cls.END])
 
-    def _set(self, slots):
-        super()._set(slots)
-        if self.output is not None:
-            out = self.output(slots)
-            if out != self.sent:  # the widget repeats the last one by itself
-                self.ser.write(self.message(self.SEND, b'\0' + out))
-                self.sent = out
+    def send(self, slots):
+        """Put `slots` on the DMX out (once the widget is open, and only
+        when they change)."""
+        with self._out_lock:
+            self._out = bytes(slots)
+            if self._ser is None or self._out == self._sent:
+                return
+            try:
+                self._ser.write(self.message(self.SEND, b'\0' + self._out))
+                self._sent = self._out
+            except Exception as e:  # noqa: BLE001 - unplugged: _run reconnects
+                self.error = str(e)
 
     def describe(self):
         return f'Enttec widget on {self.device or self.port}'
@@ -550,30 +571,41 @@ class EnttecReceiver(Receiver):
         self.device = find_port(self.port)
         frame = bytearray(513)  # start code + slots, kept for label 9 deltas
         with serial.Serial(self.device, 115200, timeout=0.5) as ser:
-            self.ser, self.sent = ser, None
-            # every frame please (also resets a widget left in on-change mode)
-            ser.write(self.message(self.RECEIVE_MODE, b'\0'))
-            buf = bytearray()
-            while not self._stop.is_set():
-                chunk = ser.read(1)
-                if not chunk:
-                    continue
-                buf += chunk + ser.read(ser.in_waiting)
-                for label, payload in self.messages(buf):
-                    if label == self.RECEIVED:
-                        if len(payload) < 2 or payload[0] != 0 or payload[1] != 0:
-                            continue  # overflow/overrun, or not dimmer data
-                        frame[: len(payload) - 1] = payload[1:]
-                        self._set(frame[1:])
-                    elif label == self.CHANGED and len(payload) >= 6:
-                        start, bits, changed = payload[0], payload[1:6], payload[6:]
-                        k = 0
-                        for b in range(40):
-                            if bits[b >> 3] >> (b & 7) & 1 and k < len(changed):
-                                if start * 8 + b < 513:
-                                    frame[start * 8 + b] = changed[k]
-                                k += 1
-                        self._set(frame[1:])
+            if self.receive:
+                # every frame please (also resets a widget left in on-change mode)
+                ser.write(self.message(self.RECEIVE_MODE, b'\0'))
+            with self._out_lock:
+                self._ser, self._sent = ser, None
+            if self._out is not None:
+                self.send(self._out)
+            try:
+                self._receive(ser, frame)
+            finally:
+                with self._out_lock:
+                    self._ser = None
+
+    def _receive(self, ser, frame):
+        buf = bytearray()
+        while not self._stop.is_set():
+            chunk = ser.read(1)  # also notices an unplugged widget when only sending
+            if not chunk or not self.receive:
+                continue
+            buf += chunk + ser.read(ser.in_waiting)
+            for label, payload in self.messages(buf):
+                if label == self.RECEIVED:
+                    if len(payload) < 2 or payload[0] != 0 or payload[1] != 0:
+                        continue  # overflow/overrun, or not dimmer data
+                    frame[: len(payload) - 1] = payload[1:]
+                    self._set(frame[1:])
+                elif label == self.CHANGED and len(payload) >= 6:
+                    start, bits, changed = payload[0], payload[1:6], payload[6:]
+                    k = 0
+                    for b in range(40):
+                        if bits[b >> 3] >> (b & 7) & 1 and k < len(changed):
+                            if start * 8 + b < 513:
+                                frame[start * 8 + b] = changed[k]
+                            k += 1
+                    self._set(frame[1:])
 
     @classmethod
     def messages(cls, buf):
@@ -726,8 +758,7 @@ def open_receiver(dmx):
         return ArtnetReceiver(dmx['universe']).start()
     if source == 'demo':
         return DemoReceiver(dmx).start()
-    output = (lambda slots: output_slots(dmx, slots)) if dmx['output'] else None
-    return EnttecReceiver(dmx['port'], output).start()
+    return EnttecReceiver(dmx['port']).start()
 
 
 # --- the desk --------------------------------------------------------------
@@ -739,6 +770,8 @@ class Desk:
     full, and so they are until the desk's first frame; a channel stays
     at its initial value until the desk changes it (see `first`), unless
     dmx.start is desk."""
+
+    INITIAL = {'master': 255.0, 'cct': 128.0}  # without the channel: as rendered
 
     def __init__(self, cfg, receiver=None):
         from . import render
@@ -770,6 +803,14 @@ class Desk:
         self.first = {}
         self.touched = set()
         self.snap = False  # start: desk, first frame: the filter jumps there
+        # the DMX out (dmx.output): the input's widget, or one of its own
+        self.output = None
+        if self.settings['output']:
+            self.output = (
+                self.receiver
+                if isinstance(self.receiver, EnttecReceiver)
+                else EnttecReceiver(self.settings['port'], receive=False).start()
+            )
 
     @property
     def on(self):
@@ -778,6 +819,8 @@ class Desk:
     def close(self):
         if self.receiver is not None:
             self.receiver.stop()
+        if self.output is not None and self.output is not self.receiver:
+            self.output.stop()
 
     @property
     def receiving(self):
@@ -809,15 +852,32 @@ class Desk:
         until the desk moves that channel itself."""
         self.override[offset] = (min(max(float(value), 0.0), 255.0), self.targets()[offset])
 
-    def frame(self):
-        """The fixture's channel values by offset, as the lamps should
-        follow them now: the desk's (or the hand's) targets, filtered."""
+    def faders(self):
+        """The fixture's channel values by offset as the faders stand: the
+        desk's targets, or the hand's where it took over."""
         targets = self.targets()
         for offset, (value, base) in list(self.override.items()):
             if targets[offset] != base:
                 del self.override[offset]  # the desk moved: it takes over again
             else:
                 targets[offset] = value
+        return targets
+
+    def send_output(self, faders):
+        """The faders to the DMX out, if there is one."""
+        if self.output is None:
+            return
+        master, cct = (
+            faders[self.channels[n]] if self.channels[n] else self.INITIAL[n]
+            for n in GLOBAL_CHANNELS
+        )
+        self.output.send(output_slots(self.settings['output'], master, cct))
+
+    def frame(self):
+        """The fixture's channel values by offset, as the lamps should
+        follow them now: the faders, filtered. Sends the DMX out along."""
+        targets = self.faders()
+        self.send_output(targets)
         if self.smooth and self.snap:
             self.smooth.values.update(targets)
             self.snap = False
@@ -890,6 +950,10 @@ class Desk:
                 f'{self._value(data, spec[n]):.0f}' for n in OBJECT_CHANNELS if n in spec
             )
             parts.append(f'{oid}: {values}')
+        if self.output is not None:
+            sent = self.output._out or bytes(512)
+            out = ' '.join(f'{ch}:{sent[ch - 1]}' for ch in self.settings['output'])
+            parts.append(f'out {self.output.error or out}')
         return [f'{head} ({signal})', '  '.join(parts)]
 
     def status(self):
