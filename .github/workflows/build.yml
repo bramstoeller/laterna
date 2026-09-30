@@ -41,8 +41,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pyinstaller
 
-      # the four sources are bundled as data: laterna/play.py hashes them into the
-      # render cache fingerprint. reportlab loads its font metrics modules by
+      # these sources are bundled as data: laterna/play.py hashes render.py,
+      # video.py, frame.py and text.py into the render cache fingerprint. reportlab loads its font metrics modules by
       # name, so they are collected explicitly
       - name: Build
         run: >
@@ -53,6 +53,7 @@ jobs:
           --add-data "laterna/video.py:laterna"
           --add-data "laterna/play.py:laterna"
           --add-data "laterna/frame.py:laterna"
+          --add-data "laterna/text.py:laterna"
           --collect-submodules reportlab.pdfbase
           laterna/__main__.py
 
