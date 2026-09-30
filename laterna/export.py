@@ -94,22 +94,24 @@ def slide_combinations(timings, limit=MAX_COMBINATIONS):
     """[(t, (k per slideshow))]: the distinct combinations of pictures a
     scene's slideshows show, in the order they first come up, with the
     seconds after entering the scene at which each starts to fade in.
-    timings = [(count, hold, transition_time)] (video.build_specs). A
-    picture counts from the start of its fade-in, as SlideshowClip.step
-    counts it."""
+    timings = [(count, hold, transition_time, loop)] (video.build_specs).
+    A picture counts from the start of its fade-in, as SlideshowClip.step
+    counts it; without loop a show stays on its last."""
     if not timings:
         return [(0.0, ())]
-    slots = [float(hold) + float(tt) for _, hold, tt in timings]
+    slots = [float(hold) + float(tt) for _, hold, tt, _ in timings]
 
     def current(t):
-        return tuple(
-            int((t + tt) // slot) % n if slot > 0 else 0 for (n, _, tt), slot in zip(timings, slots)
-        )
+        out = []
+        for (n, _, tt, loop), slot in zip(timings, slots):
+            k = int((t + tt) // slot) if slot > 0 else 0
+            out.append(k % n if loop else min(k, n - 1))
+        return tuple(out)
 
     # every combination has come up within the product of the periods
-    horizon = min(math.prod(n * s for (n, _, _), s in zip(timings, slots) if s > 0), 24 * 3600.0)
+    horizon = min(math.prod(n * s for (n, _, _, _), s in zip(timings, slots) if s > 0), 24 * 3600.0)
     events = {0.0}
-    for (n, hold, _), slot in zip(timings, slots):
+    for (n, hold, _, _), slot in zip(timings, slots):
         if slot > 0 and n > 1:
             steps = min(int(math.ceil(horizon / slot)), 10000)
             events.update(j * slot + float(hold) for j in range(steps))

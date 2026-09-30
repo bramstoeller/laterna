@@ -26,7 +26,7 @@ its extension) owns a VideoClip that starts when the slide fades in, plays
 for the slide's hold (looping when shorter, cut when longer) and is
 composited per frame like a scene video. The slideshow timeline
 (SlideshowClip) lives in the same clip pool as the scene videos and loops
-the same way.
+the same way, or with `loop: false` stays on its last slide.
 """
 
 import cv2
@@ -108,11 +108,13 @@ class SlideshowClip:
     rewind, pos), so a slideshow shares the clip pool with the videos and,
     like them, runs on seamlessly when the next scene maps the same show.
     Every slide holds `hold` seconds, then fades in `transition_time`
-    seconds to the next; after the last one the show wraps to the first."""
+    seconds to the next; after the last one the show wraps to the first,
+    or, with loop False, stays on the last."""
 
-    def __init__(self, key, count, hold, transition_time):
+    def __init__(self, key, count, hold, transition_time, loop=True):
         self.path = key
         self.count = count
+        self.loop = loop
         self.hold = float(hold)
         self.transition_time = float(transition_time)
         self.slot = self.hold + self.transition_time
@@ -123,7 +125,10 @@ class SlideshowClip:
         self.pos = None
 
     def _phase(self, t):
-        """(which slide's slot t falls in, seconds into that slot)."""
+        """(which slide's slot t falls in, seconds into that slot); without
+        loop the last slide's hold never ends."""
+        if not self.loop and t >= (self.count - 1) * self.slot:
+            return self.count - 1, 0.0
         cycle = t % (self.count * self.slot)
         k = min(int(cycle // self.slot), self.count - 1)
         return k, cycle - k * self.slot
@@ -150,7 +155,9 @@ class SlideshowClip:
         None when the show has one slide and nothing ever changes."""
         if self.count < 2 or self.slot <= 0:
             return None
-        _, phase = self._phase(t)
+        k, phase = self._phase(t)
+        if not self.loop and k == self.count - 1:
+            return None  # on the last for good
         return phase >= self.hold, self.slot - phase, self.slot
 
     def step(self, t, delta):
@@ -164,6 +171,10 @@ class SlideshowClip:
         k, phase = self._phase(t)
         if phase >= self.hold:
             k = (k + 1) % self.count  # a fade runs: the incoming one is the picture now
+        if not self.loop:  # no wrapping: the first and the last are the ends
+            if delta > 0:
+                return min(k * self.slot + self.hold, (self.count - 1) * self.slot)
+            return max(k - 1, 0) * self.slot
         if delta > 0:
             return (k * self.slot + self.hold) % (self.count * self.slot)
         return ((k - 1) % self.count) * self.slot
@@ -172,12 +183,15 @@ class SlideshowClip:
         """Seconds slide k has been visible at t: 0 at the start of its
         fade-in (the transition out of slide k-1), wrapping with the show."""
         period = self.count * self.slot
+        if not self.loop:
+            return t - k * self.slot + self.transition_time
         return (t - k * self.slot + self.transition_time) % period if period else t
 
 
 def _slideshow_key(mapping):
     """Pool key of a slideshow: same images and timing = same timeline."""
-    return 'slideshow:{}:{}:{}:{}'.format(
+    return 'slideshow:{}:{}:{}:{}:{}'.format(
+        mapping.get('loop', True),
         mapping.get('hold', render.SLIDESHOW_DEFAULTS['hold']),
         mapping.get('transition', render.SLIDESHOW_DEFAULTS['transition']),
         mapping.get('transition_time', render.SLIDESHOW_DEFAULTS['transition_time']),
@@ -367,6 +381,7 @@ def build_specs(cfg, scene, base, alpha):
                 len(m['slideshow']),
                 m.get('hold', render.SLIDESHOW_DEFAULTS['hold']),
                 m.get('transition_time', render.SLIDESHOW_DEFAULTS['transition_time']),
+                m.get('loop', True),
             )
         else:
             spec['path'] = str(cfg['_dir'] / m['video'])

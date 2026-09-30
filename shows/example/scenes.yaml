@@ -7,6 +7,7 @@
 #   image: images/<file>        a still picture
 #   video: videos/<file>        a clip, looping inside the frame
 #   slideshow: [file, ...]      pictures in turn, `hold` seconds each
+#                               (`loop: false`: stays on the last one)
 #   fit: [ids]                  size the medium over several frames together
 #   spot: false                 no spot on this medium: lit evenly (text)
 # Per scene: hold (seconds before moving on by itself; none = wait for a

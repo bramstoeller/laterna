@@ -1302,7 +1302,7 @@ def _mapping_lines(m):
     if 'slideshow' in m:
         lines = [
             f'slideshow (hold {num(m["hold"], 2)}, {m["transition"]} '
-            f'{num(m["transition_time"], 2)})'
+            f'{num(m["transition_time"], 2)}' + (', no loop)' if m.get('loop') is False else ')')
         ]
         lines += [f'  {base(p)}' for p in m['slideshow']]
     elif 'video' in m:

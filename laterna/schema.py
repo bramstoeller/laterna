@@ -192,6 +192,7 @@ class Mapping(Timing):
     width: Positive | None = None
     height: Positive | None = None
     spot: bool | None = None  # false: no look.spot on this medium (lit evenly)
+    loop: bool | None = None  # slideshow: false = stay on the last picture (default true)
 
     @model_validator(mode='after')
     def one_medium(self):
