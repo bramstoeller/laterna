@@ -270,7 +270,7 @@ def _fingerprint(config, scenes_path, cfg, scenes, supersample):
     # cache written by a buggy intermediate version can never linger. Not
     # this file: what it draws on top (bars, debug lines) is no render
     here = pathlib.Path(__file__).parent
-    for source in ('render.py', 'video.py', 'frame.py'):
+    for source in ('render.py', 'video.py', 'frame.py', 'text.py'):
         h.update((here / source).read_bytes())
     for scene in scenes:
         for m in scene.get('mappings', []):

@@ -1299,7 +1299,14 @@ def _mapping_lines(m):
     def base(path):
         return str(path).replace('\\', '/').split('/')[-1]
 
-    if 'slideshow' in m:
+    if 'text' in m:
+        first = next((t if isinstance(t, str) else t['text'] for t in m['text']), '')
+        n = len(m['text'])
+        lines = [
+            f'text ({n} line{"s" * (n != 1)}' + (', line by line)' if 'slideshow' in m else ')')
+        ]
+        lines.append(f'  {first}')
+    elif 'slideshow' in m:
         lines = [
             f'slideshow (hold {num(m["hold"], 2)}, {m["transition"]} '
             f'{num(m["transition_time"], 2)}' + (', no loop)' if m.get('loop') is False else ')')

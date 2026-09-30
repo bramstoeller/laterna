@@ -1014,6 +1014,12 @@ def parse_scenes(data, cfg):
         entry = {**entry, **parse_timing(entry, timing)}
         if entry.get('blackout'):
             entry['mappings'] = []
+        if any('text' in m for m in entry.get('mappings') or []):
+            from . import text  # set into pictures in _text/, see laterna/text.py
+
+            entry['mappings'] = [
+                text.render_mapping(cfg, m) if 'text' in m else m for m in entry['mappings']
+            ]
         for key in SCENE_COLORS:
             if key in entry:
                 entry[key] = tuple(entry[key])

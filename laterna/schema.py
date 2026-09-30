@@ -183,6 +183,30 @@ class Timing(Node):
     transition_time: NonNegative | None = None
 
 
+Align = Literal['left', 'center', 'right']
+
+
+class TextLine(Node):
+    text: str
+    align: Align | None = None
+    italic: bool | None = None
+    bold: bool | None = None
+    scale: Positive | None = None  # the line's size, relative to the others
+
+
+TEXT_ONLY = (
+    'font',
+    'color',
+    'background',
+    'align',
+    'valign',
+    'size',
+    'line_height',
+    'margin',
+    'reveal',
+)
+
+
 class Mapping(Timing):
     image: str | None = None
     video: str | None = None
@@ -193,11 +217,29 @@ class Mapping(Timing):
     height: Positive | None = None
     spot: bool | None = None  # false: no look.spot on this medium (lit evenly)
     loop: bool | None = None  # slideshow: false = stay on the last picture (default true)
+    # text instead of a picture (laterna/text.py)
+    text: Annotated[list[str | TextLine], Field(min_length=1)] | None = None
+    font: str | None = None  # a .ttf / .otf in the show folder
+    color: Rgb | None = None
+    background: Rgb | None = None
+    align: Align | None = None  # of the lines within the block (default left)
+    valign: Literal['top', 'middle', 'bottom'] | None = None  # in the opening (default bottom)
+    size: Positive | None = None  # font size in mm (default: as large as fits)
+    line_height: Positive | None = None  # in font sizes (default automatic)
+    margin: Fraction | None = None  # of the opening's width kept free (default 0.05)
+    reveal: bool | None = None  # line by line, every hold + transition_time
 
     @model_validator(mode='after')
     def one_medium(self):
-        if sum(m is not None for m in (self.image, self.video, self.slideshow)) != 1:
-            raise ValueError('a mapping needs exactly one of image, video or slideshow')
+        media = (self.image, self.video, self.slideshow, self.text)
+        if sum(m is not None for m in media) != 1:
+            raise ValueError('a mapping needs exactly one of image, video, slideshow or text')
+        if self.text is not None and not self.font:
+            raise ValueError('text needs a font (a .ttf or .otf in the show folder)')
+        if self.text is None:
+            used = [k for k in TEXT_ONLY if getattr(self, k) is not None]
+            if used:
+                raise ValueError(f'{", ".join(used)}: only with text')
         return self
 
     @field_validator('objects', 'fit')

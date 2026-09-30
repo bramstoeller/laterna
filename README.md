@@ -3,7 +3,7 @@
 Projection mapping for stage frames (laterna: Latin for lantern, as in
 laterna magica). One projector lights a set of physical picture frames:
 laterna draws a virtual gilded molding exactly on the frames, fits
-pictures, slideshows and videos inside, lights them with pretend
+pictures, text, slideshows and videos inside, lights them with pretend
 spotlights and steps through the show's scenes on a key press or from a
 lighting desk (sACN, Art-Net or an Enttec USB DMX interface).
 
@@ -71,6 +71,31 @@ In show order, each saving what it sets to `config.yaml`:
 Q / Esc goes back: from an app to the show's menu, from there to the
 show list, from there it quits. Each app also runs on its own inside a
 show folder, e.g. `python -m laterna.play --test` for a headless self-test.
+
+## Text
+
+A mapping can show text instead of a picture: the lines, a font file in
+the show folder, and optionally `reveal: true` to bring them in one by
+one. laterna sets the text as large as fits the frame's opening:
+
+```yaml
+- text:
+    - Een leven in puin, net als dat van ons
+    - ""                                  # a stanza break
+    - {text: – Jep Gambardella, align: right}
+    - {text: La Grande Bellezza, align: right, italic: true}
+  font: fonts/Attic.ttf
+  reveal: true                            # a line every hold + transition_time
+  hold: 2
+  transition_time: 1
+  objects: [2]
+  spot: false
+```
+
+Also `color`, `background`, `align` (left, center, right), `valign` (top,
+middle, bottom), `size` (mm), `line_height` and `margin`; see
+`laterna/text.py`. A slideshow can stop on its last picture with
+`loop: false`.
 
 ## Checking a show
 
