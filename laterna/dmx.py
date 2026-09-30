@@ -64,6 +64,12 @@ from its first frame, taken over at once (no fade from full): for a show
 whose dark comes from the desk, which starts with the master at 0. When
 the signal stops the last frame holds (a DMX receiver never blacks out
 by itself).
+Output (`dmx.output`, enttec only): the widget's DMX out drives a lamp
+of its own with each frame that comes in: `white` gets the master,
+`amber` master x (255 - cct) / 255 (warm = more amber), both as the desk
+sends them (no dimmer curve, no smoothing: the lamp has its own; the
+faders by hand do not reach it). Absolute channels on the out line,
+every other slot 0.
 `python -m laterna.dmx` prints the fixture's channels live: the on-site check
 that the cable and the patch are right.
 """
@@ -86,7 +92,9 @@ DEFAULTS = {
     'smooth': [0.04, 0.08],
     'start': 'full',
     'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
+    'output': None,  # {white: channel, amber: channel} on the Enttec's DMX out
 }
+OUTPUT_CHANNELS = ('white', 'amber')
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
 GLOBAL_CHANNELS = ('master', 'cct')
 OBJECT_CHANNELS = ('canvas', 'frame', 'power')
@@ -181,7 +189,40 @@ def settings(cfg):
         raise ValueError('dmx.curve is a positive number (2.2: half the fader, half the light)')
     if dmx['start'] not in ('full', 'desk'):
         raise ValueError('dmx.start is full (a channel is full until it moves) or desk')
+    dmx['output'] = parse_output(dmx)
     return dmx
+
+
+def parse_output(dmx):
+    """dmx.output as {'white': channel, 'amber': channel}, or None."""
+    value = dmx['output']
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != set(OUTPUT_CHANNELS):
+        raise ValueError('dmx.output has white and amber (channels on the DMX out)')
+    if dmx['source'] != 'enttec':
+        raise ValueError('dmx.output needs dmx.source enttec')
+    if not (dmx['channels']['master'] and dmx['channels']['cct']):
+        raise ValueError('dmx.output needs the master and cct channels')
+    out = {}
+    for name in OUTPUT_CHANNELS:
+        channel = _offset(value[name], f'output.{name}')
+        if channel > 512:
+            raise ValueError(f'dmx.output.{name} is a channel 1..512')
+        out[name] = channel
+    return out
+
+
+def output_slots(dmx, slots):
+    """The DMX out for a frame from the desk (see Output above)."""
+    out, channels = dmx['output'], dmx['channels']
+    first = dmx['address'] - 1
+    dim = slots[first + channels['master'] - 1]
+    cct = slots[first + channels['cct'] - 1]
+    data = bytearray(max(24, *out.values()))  # the widget sends 24 slots at least
+    data[out['white'] - 1] = dim
+    data[out['amber'] - 1] = round(dim * (255 - cct) / 255)
+    return bytes(data)
 
 
 def parse_smooth(value):
@@ -478,12 +519,27 @@ class EnttecReceiver(Receiver):
     case a widget was left in that mode."""
 
     START, END = 0x7E, 0xE7
-    RECEIVED, RECEIVE_MODE, CHANGED = 5, 8, 9
+    RECEIVED, SEND, RECEIVE_MODE, CHANGED = 5, 6, 8, 9
 
-    def __init__(self, port):
+    def __init__(self, port, output=None):
         super().__init__()
         self.port = port
+        self.output = output  # received slots -> the DMX out's slots, or None
         self.device = None
+        self.ser = self.sent = None
+
+    @classmethod
+    def message(cls, label, payload):
+        n = len(payload)
+        return bytes([cls.START, label, n & 0xFF, n >> 8]) + payload + bytes([cls.END])
+
+    def _set(self, slots):
+        super()._set(slots)
+        if self.output is not None:
+            out = self.output(slots)
+            if out != self.sent:  # the widget repeats the last one by itself
+                self.ser.write(self.message(self.SEND, b'\0' + out))
+                self.sent = out
 
     def describe(self):
         return f'Enttec widget on {self.device or self.port}'
@@ -494,8 +550,9 @@ class EnttecReceiver(Receiver):
         self.device = find_port(self.port)
         frame = bytearray(513)  # start code + slots, kept for label 9 deltas
         with serial.Serial(self.device, 115200, timeout=0.5) as ser:
+            self.ser, self.sent = ser, None
             # every frame please (also resets a widget left in on-change mode)
-            ser.write(bytes([self.START, self.RECEIVE_MODE, 1, 0, 0, self.END]))
+            ser.write(self.message(self.RECEIVE_MODE, b'\0'))
             buf = bytearray()
             while not self._stop.is_set():
                 chunk = ser.read(1)
@@ -669,7 +726,8 @@ def open_receiver(dmx):
         return ArtnetReceiver(dmx['universe']).start()
     if source == 'demo':
         return DemoReceiver(dmx).start()
-    return EnttecReceiver(dmx['port']).start()
+    output = (lambda slots: output_slots(dmx, slots)) if dmx['output'] else None
+    return EnttecReceiver(dmx['port'], output).start()
 
 
 # --- the desk --------------------------------------------------------------
