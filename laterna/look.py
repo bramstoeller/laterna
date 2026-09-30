@@ -19,22 +19,13 @@ seen. Tune:
   or a cone lamp close to the frame) and, when configured, the molding's
   own spot (`molding_spot`). Settings come in pages, Tab cycles them.
 
-The last page, `desk`, shows the view under the light desk's channels
-(config.yaml `dmx:`, laterna/dmx.py) with the faders on screen (laterna/faders.py):
-they follow the desk and can be dragged, or selected with 1..9 and
-nudged with up/down (held down the key repeats, so the fader slides;
-with Shift five times as fast). Nothing on that page is saved: it is
-there to try
-the faders, from the desk, the keys or the mouse, and it shows no menu,
-only the faders. The other pages show the base settings, without the
-desk.
+Everything shows at full light, without the desk: the desk and its
+faders are the DMX app's (laterna/desk.py).
 
 Keys:
-  1..9, 0        select a setting on the current page (see the overlay);
-                 on the desk page a fader
-  Tab            next page (look / picture spot / molding spot / desk)
-  up / down      adjust the selected setting  (with Shift: x5); on the desk
-                 page the key repeats while held, so a fader slides
+  1..9, 0        select a setting on the current page (see the overlay)
+  Tab            next page (look / picture spot / molding spot)
+  up / down      adjust the selected setting  (with Shift: x5)
   left / right   previous / next scene
   T              reset all settings to the values at startup
   S              save to config.yaml
@@ -47,14 +38,12 @@ Other:
 """
 
 import argparse
-import collections
 import copy
-import time
 
 import numpy as np
 import pygame
 
-from . import calibration, dmx, faders, lamps, render, ui
+from . import calibration, dmx, lamps, render, ui
 
 # Settings come in pages (Tab cycles them): label, path into cfg['look'],
 # step, minimum, maximum. Keys 1..9 and 0 select within the page.
@@ -104,15 +93,11 @@ def _spot_page(name, key, spot):
     )
 
 
-PAGE_DESK = ('desk', [])  # no settings: the faders, and the desk's levels applied
-
-
 def pages(look):
-    """The settings pages for a (completed) look dict; the desk page last."""
+    """The settings pages for a (completed) look dict."""
     out = [PAGE_LOOK, _spot_page('picture spot', 'spot', look['spot'])]
     if look.get('molding_spot'):
         out.append(_spot_page('molding spot', 'molding_spot', look['molding_spot']))
-    out.append(PAGE_DESK)
     return out
 
 
@@ -210,20 +195,13 @@ def self_test(cfg, scenes_path):
     print('self-test ok (written: _renders/look.png, _renders/look-white.png)')
 
 
-def run(
-    screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3, dmx_source=None
-):
-    """Run the app; with a screen provided, reuse it (menu mode).
-    `dmx_source` overrides dmx.source for the desk page (the --dmx flag)."""
+def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):
+    """Run the app; with a screen provided, reuse it (menu mode)."""
     cfg = render.load_config(config)
     cfg['look'] = render.look_settings(cfg)  # complete, so every setting exists
     snap = copy.deepcopy(cfg['look'])
     scenes = load_views(scenes_path, cfg)
-    # the desk for the desk page; a --dmx override stays out of cfg, so S
-    # never saves it
-    desk = dmx.Desk(
-        {**cfg, 'dmx': {**(cfg.get('dmx') or {}), 'source': dmx_source}} if dmx_source else cfg
-    )
+    ids = [o['id'] for o in cfg['objects']]
 
     standalone = screen is None
     if standalone:
@@ -232,12 +210,8 @@ def run(
         pygame.display.set_caption(f'Look — {ui.APP_NAME}')
         pygame.mouse.set_visible(False)
     font = ui.help_font()
-    # every step re-renders (~1 s) on the look pages: no key repeat there.
-    # The desk page only moves a fader, so there the key repeats (set_page)
-    pygame.key.set_repeat()
-    REPEAT = (300, 30)  # ms before the first repeat, ms between: ~33 values/s
+    pygame.key.set_repeat()  # every step re-renders (~1 s): no key repeat
     lights = lamps.Lamps(cfg)
-    panel = faders.Faders(desk, pygame.font.SysFont('monospace', 16))
 
     def build_renderer():
         screen.fill((0, 0, 0))
@@ -253,55 +227,20 @@ def run(
     show_help = True
     message = ''
     surface = molding = None
-    ticks = collections.deque(maxlen=60)  # (time, lamps ms) of the last frames drawn
-
-    def on_desk_page():
-        all_pages = pages(cfg['look'])
-        return all_pages[page % len(all_pages)] is PAGE_DESK
 
     def rerender():
         nonlocal surface, molding
         renderer.apply_look()
-        desk.kelvin = float(cfg['look']['temperature'])  # the desk's cct 128
         lights.white = float(cfg['look']['white'])
         lights.collapse = float(cfg['look']['spot_collapse'])
         surface = renderer.render(scenes[idx])
         molding = renderer.render_molding(scenes[idx])
 
-    def set_page(new):
-        """Switch pages; the desk page brings the faders and the mouse,
-        with the first fader selected for the keys and key repeat on (hold
-        up/down to slide a fader)."""
-        nonlocal page, selected
-        page, selected = new, 0
-        ticks.clear()  # the frame rate of this page only
-        if on_desk_page() != panel.visible:
-            panel.toggle()
-        if on_desk_page():
-            panel.select(0)
-            pygame.key.set_repeat(*REPEAT)
-        else:
-            pygame.key.set_repeat()
-
     def show():
-        # the base pages: full light at the look's colour temperature; the
-        # desk page: whatever the desk (or the faders) ask
-        levels = desk.levels() if on_desk_page() else dmx.Levels.full(desk.kelvin, desk.ids)
-        t0 = time.perf_counter()
+        # full light at the look's colour temperature
+        levels = dmx.Levels.full(float(cfg['look']['temperature']), ids)
         lights.light(screen, surface, molding, levels)
-        ticks.append((t0, (time.perf_counter() - t0) * 1000.0))
-        top = panel.draw(screen) if panel.visible else 0
-        if on_desk_page():
-            # the faders speak for themselves: no menu here, only the frame
-            # rate (with what the lamps take of each frame) and a message
-            lines = [message] if message else []
-            if len(ticks) > 1 and ticks[-1][0] > ticks[0][0]:
-                fps = (len(ticks) - 1) / (ticks[-1][0] - ticks[0][0])
-                lamps_ms = sum(ms for _, ms in ticks) / len(ticks)
-                lines.insert(0, f'{fps:.0f} fps   lamps {lamps_ms:.1f} ms per frame')
-            if lines:
-                ui.draw_help(screen, font, lines, top=top + 20)
-        elif show_help:
+        if show_help:
             lines = [
                 f'view {idx + 1}/{len(scenes)}: {scenes[idx].get("name", "?")}'
                 + ('   * unsaved changes *' if dirty else '')
@@ -320,20 +259,16 @@ def run(
             ]
             if message:
                 lines.append(message)
-            ui.draw_help(screen, font, lines, top=top + 20)
+            ui.draw_help(screen, font, lines)
         pygame.display.flip()
 
     rerender()
     show()
     running = True
     while running:
-        # the desk page redraws every 16 ms (the levels move), the others
-        # sleep on the event queue
-        event = pygame.event.wait(16) if on_desk_page() else pygame.event.wait()
+        event = pygame.event.wait()
         if event.type == pygame.QUIT:
             running = False
-        elif panel.visible and panel.handle(event):
-            pass
         elif event.type == pygame.KEYDOWN:
             shift = event.mod & pygame.KMOD_SHIFT
             steps = 5 if shift else 1
@@ -342,12 +277,8 @@ def run(
                 running = False
             elif event.key in SELECT_KEYS:
                 selected = SELECT_KEYS[event.key]
-                if on_desk_page():
-                    panel.select(selected)
             elif event.key == pygame.K_TAB:
-                set_page((page + 1) % len(pages(cfg['look'])))
-            elif event.key in (pygame.K_UP, pygame.K_DOWN) and on_desk_page():
-                panel.nudge(steps if event.key == pygame.K_UP else -steps)
+                page, selected = (page + 1) % len(pages(cfg['look'])), 0
             elif event.key in (pygame.K_UP, pygame.K_DOWN):
                 all_pages = pages(cfg['look'])
                 settings = all_pages[page % len(all_pages)][1]
@@ -365,8 +296,6 @@ def run(
             elif event.key == pygame.K_LEFT:
                 idx = max(idx - 1, 0)
                 rerender()
-            elif event.key in (pygame.K_t, pygame.K_s) and on_desk_page():
-                message = 'the desk page saves nothing (Tab to the look pages for S)'
             elif event.key == pygame.K_t:
                 cfg['look'] = copy.deepcopy(snap)
                 dirty = True
@@ -389,16 +318,12 @@ def run(
                 rerender()
             elif event.key == pygame.K_h:
                 show_help = not show_help
-            if not on_desk_page():
-                # drop key presses queued while rendering: one step per
-                # press (on the desk page they are the repeats that slide)
-                pygame.event.clear(pygame.KEYDOWN)
+            # drop key presses queued while rendering: one step per press
+            pygame.event.clear(pygame.KEYDOWN)
         elif event.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED):
             pass
         show()
 
-    desk.close()
-    pygame.key.set_repeat()
     pygame.mouse.set_visible(False)
     if standalone:
         pygame.quit()
@@ -412,11 +337,6 @@ def main():
     ap.add_argument(
         '--test', action='store_true', help='self-test: render one scene with a spot, no display'
     )
-    ap.add_argument(
-        '--dmx',
-        choices=dmx.SOURCES,
-        help='override dmx.source for the desk page (demo = a scripted desk)',
-    )
     args = ap.parse_args()
     if args.test:
         self_test(render.load_config(args.config), args.scenes)
@@ -425,7 +345,6 @@ def main():
         config=args.config,
         scenes_path=args.scenes,
         supersample=args.supersample,
-        dmx_source=args.dmx,
     )
 
 

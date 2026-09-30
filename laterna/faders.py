@@ -1,5 +1,5 @@
-"""On-screen faders for the light desk's channels, a hidden feature of
-Present (Tab). One fader per channel offset of the fixture (laterna/dmx.py),
+"""On-screen faders for the light desk's channels: the DMX app's demo
+page (laterna/desk.py), and a hidden feature of Present (Tab). One fader per channel offset of the fixture (laterna/dmx.py),
 across the top of the picture: the knob is the value the lamps are on
 (after the smoothing), the thin line is what the desk sends (drawn once
 a desk has sent anything). Dragging a
