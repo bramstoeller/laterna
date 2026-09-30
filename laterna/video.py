@@ -140,7 +140,8 @@ class SlideshowClip:
             state = (0, 0, 0)
         else:
             k, phase = self._phase(t)
-            if phase < self.hold or self.transition_time <= 0:
+            last = not self.loop and k == self.count - 1  # stays: nothing after it
+            if phase < self.hold or self.transition_time <= 0 or last:
                 state = (k, k, 0)
             else:
                 blend = (phase - self.hold) / self.transition_time
@@ -169,7 +170,7 @@ class SlideshowClip:
         the previous picture: the timeline only fades forwards, so fading
         there would mean showing the one before it first."""
         k, phase = self._phase(t)
-        if phase >= self.hold:
+        if phase >= self.hold and (self.loop or k < self.count - 1):
             k = (k + 1) % self.count  # a fade runs: the incoming one is the picture now
         if not self.loop:  # no wrapping: the first and the last are the ends
             if delta > 0:

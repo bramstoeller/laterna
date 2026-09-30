@@ -149,7 +149,8 @@ def views(scenes):
             mappings = []
             for m in scene['mappings']:
                 if 'slideshow' in m:
-                    item = m['slideshow'][k % len(m['slideshow'])]
+                    n = len(m['slideshow'])
+                    item = m['slideshow'][k % n if m.get('loop', True) else min(k, n - 1)]
                     m = {
                         **{
                             key: v

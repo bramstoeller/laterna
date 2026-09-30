@@ -9,7 +9,7 @@ Two pages, Tab switches:
   demo     the scenes (as Look shows them, laterna/look.py) under the
            desk's channels, with the faders on screen (laterna/faders.py):
            they follow the desk and can be dragged, or selected with 1..9
-           and nudged with up/down (held down the key repeats, so the
+           and nudged with up/down (on the channels page too, unseen) (held down the key repeats, so the
            fader slides; with Shift five times as fast); left / right
            steps through the scenes
 
@@ -154,36 +154,37 @@ def run(
                 screen.blit(font.render(hint, True, DIM), (30, y + 20))
         pygame.display.flip()
 
-    set_page(0)
-    running = True
-    while running:
-        event = pygame.event.wait(16)  # the values move: redraw every 16 ms
-        if event.type == pygame.QUIT:
-            running = False
-        elif panel.visible and panel.handle(event):
-            pass
-        elif event.type == pygame.KEYDOWN:
-            steps = 5 if event.mod & pygame.KMOD_SHIFT else 1
-            if event.key in ui.QUIT_KEYS:
+    try:
+        set_page(0)
+        running = True
+        while running:
+            event = pygame.event.wait(16)  # the values move: redraw every 16 ms
+            if event.type == pygame.QUIT:
                 running = False
-            elif event.key == pygame.K_TAB:
-                set_page((page + 1) % len(PAGES))
-            elif event.key == pygame.K_h:
-                show_help = not show_help
-            elif event.key in look.SELECT_KEYS:
-                panel.select(look.SELECT_KEYS[event.key])
-            elif event.key in (pygame.K_UP, pygame.K_DOWN):
-                panel.nudge(steps if event.key == pygame.K_UP else -steps)
-            elif event.key in (pygame.K_LEFT, pygame.K_RIGHT) and PAGES[page] == 'demo':
-                step = 1 if event.key == pygame.K_RIGHT else -1
-                idx = min(max(demo['idx'] + step, 0), len(demo['scenes']) - 1)
-                if idx != demo['idx']:
-                    demo['idx'] = idx
-                    render_scene()
-        draw()
-
-    desk.close()
-    pygame.key.set_repeat()
+            elif panel.visible and panel.handle(event):
+                pass
+            elif event.type == pygame.KEYDOWN:
+                steps = 5 if event.mod & pygame.KMOD_SHIFT else 1
+                if event.key in ui.QUIT_KEYS:
+                    running = False
+                elif event.key == pygame.K_TAB:
+                    set_page((page + 1) % len(PAGES))
+                elif event.key == pygame.K_h:
+                    show_help = not show_help
+                elif event.key in look.SELECT_KEYS:
+                    panel.select(look.SELECT_KEYS[event.key])
+                elif event.key in (pygame.K_UP, pygame.K_DOWN):
+                    panel.nudge(steps if event.key == pygame.K_UP else -steps)
+                elif event.key in (pygame.K_LEFT, pygame.K_RIGHT) and PAGES[page] == 'demo':
+                    step = 1 if event.key == pygame.K_RIGHT else -1
+                    idx = min(max(demo['idx'] + step, 0), len(demo['scenes']) - 1)
+                    if idx != demo['idx']:
+                        demo['idx'] = idx
+                        render_scene()
+            draw()
+    finally:  # also on an error (a text that does not fit, ...): free the desk
+        desk.close()
+        pygame.key.set_repeat()
     pygame.mouse.set_visible(False)
     if standalone:
         pygame.quit()

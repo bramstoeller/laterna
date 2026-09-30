@@ -236,6 +236,10 @@ class Mapping(Timing):
             raise ValueError('a mapping needs exactly one of image, video, slideshow or text')
         if self.text is not None and not self.font:
             raise ValueError('text needs a font (a .ttf or .otf in the show folder)')
+        if self.text is not None and (
+            len(self.objects) != 1 or self.fit or self.width or self.height
+        ):
+            raise ValueError('text goes in one frame: one object, no fit, width or height')
         if self.text is None:
             used = [k for k in TEXT_ONLY if getattr(self, k) is not None]
             if used:

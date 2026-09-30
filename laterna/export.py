@@ -104,7 +104,7 @@ def slide_combinations(timings, limit=MAX_COMBINATIONS):
     def current(t):
         out = []
         for (n, _, tt, loop), slot in zip(timings, slots):
-            k = int((t + tt) // slot) if slot > 0 else 0
+            k = int((t + tt) // slot) if slot > 0 else (0 if loop else n - 1)
             out.append(k % n if loop else min(k, n - 1))
         return tuple(out)
 
@@ -165,7 +165,9 @@ def _pictures(cfg, renderer, scene, first_only=False):
         for (spec, m), k in zip(shows, combo):
             rows, _ = video._slide_rows(spec, k, 0.0, lut)  # a video slide: its first frame
             flat[spec['flat']] = rows
-            names.append(_stem(m['slideshow'][k]))
+            names.append(
+                f'text {k}/{len(m["slideshow"]) - 1}' if 'text' in m else _stem(m['slideshow'][k])
+            )
             slides[id(m)] = k
         fade = max(
             (

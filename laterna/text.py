@@ -22,14 +22,16 @@ empty line is a stanza break (STANZA of a line).
 
 For the whole text: `color` and `background` ([r, g, b], default white
 on black), `valign` top, middle or bottom in the opening (default
-bottom: an arch is widest there), `size` the font size in mm (default:
-as large as fits inside the opening of the first object, less `margin`,
-a fraction of its width, default 0.05), `line_height` in font sizes
+bottom: an arch is widest there), `size` the font size in mm (an error
+when it does not fit; default: as large as fits inside the opening, less
+`margin`, a fraction of its width, default 0.05), `line_height` in font sizes
 (default automatic: LEAD, spread up to SPREAD_MAX when the width limits
 the size and height is left). The block is centred across the opening.
 
-The text is set into pictures the size of the opening (PX_PER_MM), kept
-in _text/ in the show folder under a hash of everything they depend on,
+Text goes in one frame (one object, standing straight, no fit or size).
+It is set into pictures the size of the opening (PX_PER_MM), kept in
+_text/ in the show folder under a hash of everything they depend on (old
+ones there can go: they are made again when needed),
 and the mapping becomes an `image:` (or with reveal a `slideshow:` with
 loop false: an empty picture first, then one more line each step), so
 playing, Look and the export treat it as any picture.
@@ -37,6 +39,7 @@ playing, Look and the export treat it as any picture.
 
 import hashlib
 import json
+import os
 import pathlib
 
 import cv2
@@ -86,6 +89,10 @@ def opening(cfg, oid):
     """The opening of object `oid` as a mask at PX_PER_MM (the size of the
     inner outline's bounding box, as the pictures are fitted)."""
     obj = next(o for o in cfg['objects'] if o['id'] == oid)
+    if float(obj.get('rotation') or 0.0):
+        raise ValueError(
+            f'text: object {oid} is rotated, text goes in a frame that stands straight'
+        )
     inner = np.array(obj['frame']['inner'], float) * float(obj.get('scale') or 1.0)
     lo, hi = inner.min(axis=0), inner.max(axis=0)
     w = max(1, round((hi[0] - lo[0]) * PX_PER_MM))
@@ -212,8 +219,12 @@ def layout(mapping, font_path, mask):
         return lay, shift, fits
 
     if mapping.get('size'):
-        size = float(mapping['size']) * PX_PER_MM
-        lay, shift, _ = attempt(size, 1.0)
+        lay, shift, fits = attempt(float(mapping['size']) * PX_PER_MM, 1.0)
+        if not fits:
+            raise ValueError(
+                f'text: size {mapping["size"]:g} mm does not fit the opening (leave size out: '
+                'the largest that fits)'
+            )
         return lay, shift
     lo, hi = 4, max(8, shape[0])  # font px: lo fits, hi does not
     if not attempt(lo, 1.0)[2]:
@@ -251,6 +262,18 @@ def _picture(ink, mapping):
     return np.round(back * (1 - a) + color * a).astype(np.uint8)
 
 
+def _write(path, rgb):
+    """The picture as a PNG, whole or not at all: written next to it and
+    then renamed (a file that exists counts as done); by bytes, so a path
+    with any characters works on Windows too."""
+    ok, png = cv2.imencode('.png', cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+    if not ok:
+        raise OSError(f'could not encode {path.name}')
+    part = path.with_name(path.name + '.part')
+    part.write_bytes(png.tobytes())
+    os.replace(part, path)
+
+
 def render_mapping(cfg, mapping):
     """The mapping with its text set: `image:` (or `slideshow:`), the files
     in _text/ (made when missing), relative to the show folder."""
@@ -273,8 +296,7 @@ def render_mapping(cfg, mapping):
         steps = range(count + 1) if reveal else [None]
         for name, upto in zip(names, steps):
             ink = _shift(lay.ink(upto), mask.shape, dx, dy)
-            rgb = _picture(ink, mapping)
-            cv2.imwrite(str(folder / name), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            _write(folder / name, _picture(ink, mapping))
     out = {k: v for k, v in mapping.items() if k not in KEYS}
     out['text'] = mapping['text']  # kept for the export's scenes sheet
     if reveal:

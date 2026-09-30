@@ -1301,7 +1301,7 @@ def _mapping_lines(m):
 
     if 'text' in m:
         first = next((t if isinstance(t, str) else t['text'] for t in m['text']), '')
-        n = len(m['text'])
+        n = sum(1 for t in m['text'] if (t if isinstance(t, str) else t['text']).strip())
         lines = [
             f'text ({n} line{"s" * (n != 1)}' + (', line by line)' if 'slideshow' in m else ')')
         ]
