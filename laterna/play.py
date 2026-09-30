@@ -26,8 +26,9 @@ doing: red while a transition runs, orange while a scene's hold runs,
 green when it waits for a key, dim blue in a blackout with the desk's
 master at 0 (the master coming up goes on, see below). It is a row of
 2 x 2 px blocks 2 px apart: one in the corner plus, darker, one for every
-whole second left (rounded up), so red and orange lose a block per
-second towards the corner; green and blue are just the corner block.
+whole second left (rounded down: the last second shows the corner block
+alone), so red and orange lose a block per second towards the corner;
+green and blue are just the corner block.
 A countdown too long to fit in a quarter of the width goes to 2, 3, 5,
 10, 15, 20, 30 seconds a block and then whole minutes; the step follows
 the whole stretch being counted, so it never changes halfway and the bar
@@ -647,7 +648,7 @@ def run(
             if not level:
                 return
             unit = unit or bar_unit(max(span, left, 0.0), max_blocks)
-            for k in range(1 + math.ceil(max(left, 0.0) / unit - 1e-3)):
+            for k in range(1 + math.floor(max(left, 0.0) / unit + 1e-3)):
                 x = STATE_PITCH * k if on_left else right - STATE_PX - STATE_PITCH * k
                 color = colors[0] if k == 0 else colors[1]
                 pygame.draw.rect(
