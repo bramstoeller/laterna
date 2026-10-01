@@ -192,6 +192,16 @@ class TextLine(Node):
     italic: bool | None = None
     bold: bool | None = None
     scale: Positive | None = None  # the line's size, relative to the others
+    # a place of its own, in the frame's mm (x from its middle, y up from the
+    # bottom of the wood; x the edge or middle as it aligns, y the baseline)
+    x: float | None = None
+    y: float | None = None
+
+    @model_validator(mode='after')
+    def both_or_neither(self):
+        if (self.x is None) != (self.y is None):
+            raise ValueError('a line takes x and y together (or neither)')
+        return self
 
 
 TEXT_ONLY = (
@@ -224,9 +234,15 @@ class Mapping(Timing):
     background: Rgb | None = None
     align: Align | None = None  # of the lines within the block (default left)
     valign: Literal['top', 'middle', 'bottom'] | None = None  # in the opening (default bottom)
-    size: Positive | None = None  # font size in mm (default: as large as fits)
-    line_height: Positive | None = None  # in font sizes (default automatic)
-    margin: Fraction | None = None  # of the opening's width kept free (default 0.05)
+    size: Positive | Literal['auto'] | None = None  # font size in mm; auto: as large as fits
+    line_height: Positive | Literal['auto'] | None = None  # in font sizes; auto: spread to fit
+    # of the opening's width kept free: one for all sides or [top, right, bottom, left]
+    margin: (
+        Fraction
+        | Annotated[list[Fraction], Field(min_length=4, max_length=4)]
+        | Literal['auto']
+        | None
+    ) = None
     reveal: bool | None = None  # line by line, every hold + transition_time
 
     @model_validator(mode='after')
