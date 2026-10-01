@@ -221,7 +221,8 @@ class Mapping(Timing):
     image: str | None = None
     video: str | None = None
     slideshow: Annotated[list[str], Field(min_length=1)] | None = None
-    objects: Annotated[list[int], Field(min_length=1)]
+    # the frames it goes on; left out in a scene that maps by position
+    objects: Annotated[list[int], Field(min_length=1)] | None = None
     fit: list[int] | None = None
     width: Positive | None = None
     height: Positive | None = None
@@ -253,7 +254,10 @@ class Mapping(Timing):
         if self.text is not None and not self.font:
             raise ValueError('text needs a font (a .ttf or .otf in the show folder)')
         if self.text is not None and (
-            len(self.objects) != 1 or self.fit or self.width or self.height
+            (self.objects is not None and len(self.objects) != 1)
+            or self.fit
+            or self.width
+            or self.height
         ):
             raise ValueError('text goes in one frame: one object, no fit, width or height')
         if self.text is None:
@@ -272,23 +276,42 @@ class Mapping(Timing):
         return value
 
 
+# a scene's mapping: in full (with objects), or by position (the n-th for the
+# n-th frame of config.yaml): a mapping without objects, a file (picture or
+# video), a list of files (a slideshow) or null (that frame stays empty)
+MappingItem = None | str | Annotated[list[str], Field(min_length=1)] | Mapping
+
+
 class Scene(Timing):
     name: str | None = None
     description: str | None = None
-    mappings: list[Mapping] | None = None
+    mappings: list[MappingItem] | None = None
     blackout: Literal[True] | None = None
     molding_color: Rgb | None = None
     fill_color: Rgb | None = None
 
     @model_validator(mode='after')
-    def contents(self):
+    def contents(self, info: ValidationInfo):
         if self.blackout:
             if self.mappings or self.molding_color or self.fill_color:
                 raise ValueError('a blackout scene shows nothing: no mappings, no colours')
         elif self.mappings is None:
             raise ValueError('a scene needs mappings (or blackout: true)')
+        items = self.mappings or []
+        full = [isinstance(m, Mapping) and m.objects is not None for m in items]
+        if any(full) and not all(full):
+            raise ValueError(
+                'mappings: all by position (no objects) or all with objects, not mixed'
+            )
+        if not any(full):  # by position: one item per frame at most
+            order = (info.context or {}).get('order')
+            if order is not None and len(items) > len(order):
+                raise ValueError(
+                    f'{len(items)} mappings by position, but config.yaml has {len(order)} frames'
+                )
+            return self
         used = set()
-        for m in self.mappings or []:
+        for m in items:
             for i in m.objects:
                 if i in used:
                     raise ValueError(f'object {i} mapped twice')
@@ -408,7 +431,7 @@ def check_scenes(data, ids, what='scenes.yaml'):
     if isinstance(data, dict) and 'stages' in data and 'scenes' not in data:
         # the older name of the list (a scene was a stage)
         data = {('scenes' if k == 'stages' else k): v for k, v in data.items()}
-    return check(Scenes, data, what, context={'ids': set(ids)})
+    return check(Scenes, data, what, context={'ids': set(ids), 'order': list(ids)})
 
 
 def write_json_schemas(folder='.'):

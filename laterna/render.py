@@ -1009,11 +1009,13 @@ def parse_scenes(data, cfg):
     and `transition_time` filled in.
 
     A blackout scene (`blackout: true`) is all black; its fade dims
-    everything together, like a master fader (play.py).
+    everything together, like a master fader (play.py). Mappings by
+    position come out in full (full_mappings), every one with objects.
 
     Returns (scenes, fades) with fades[i] = duration between scene i and i+1.
     """
-    data = schema.check_scenes(data, [o['id'] for o in cfg['objects']])
+    ids = [o['id'] for o in cfg['objects']]
+    data = schema.check_scenes(data, ids)
     top = dict(data)
     if 'fade' in top:
         top['transition_time'] = top.pop('fade')
@@ -1026,6 +1028,7 @@ def parse_scenes(data, cfg):
         entry = {**entry, **parse_timing(entry, timing)}
         if entry.get('blackout'):
             entry['mappings'] = []
+        entry['mappings'] = full_mappings(entry.get('mappings') or [], ids)
         if any('text' in m for m in entry.get('mappings') or []):
             from . import text  # set into pictures in _text/, see laterna/text.py
 
@@ -1046,6 +1049,25 @@ def parse_scenes(data, cfg):
         pending = None
         scenes.append(entry)
     return scenes, fades
+
+
+def full_mappings(items, ids):
+    """A scene's mappings in full. By position (no item has objects) the
+    n-th item goes on the n-th frame of `ids`: a file is an image (or a
+    video, by its extension), a list of files a slideshow, a mapping gets
+    objects: [that frame], null leaves the frame empty."""
+    if any(isinstance(m, dict) and 'objects' in m for m in items):
+        return list(items)  # in full already
+    out = []
+    for oid, item in zip(ids, items):
+        if item is None:
+            continue
+        if isinstance(item, str):
+            item = {('video' if is_video_path(item) else 'image'): item}
+        elif isinstance(item, list):
+            item = {'slideshow': item}
+        out.append({**item, 'objects': [oid]})
+    return out
 
 
 # scene-level colours: the molding's base colour and the fill of the

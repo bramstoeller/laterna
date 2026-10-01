@@ -3,7 +3,11 @@
 # low quality on purpose: Katsushika Hokusai, The Great Wave off Kanagawa
 # (c. 1831), and Johannes Vermeer, Girl with a Pearl Earring (c. 1665).
 #
-# A scene maps media onto object ids (from config.yaml):
+# A scene's mappings go by position: the n-th on the n-th frame of
+# config.yaml; an item is a file (a picture, or a video by its extension),
+# a list of files (a slideshow), null (that frame stays empty) or a mapping
+# with the keys below. Over several frames: every mapping of the scene in
+# full, with objects: [ids].
 #   image: images/<file>        a still picture
 #   video: videos/<file>        a clip, looping inside the frame
 #   slideshow: [file, ...]      pictures in turn, `hold` seconds each
@@ -19,10 +23,8 @@ transition_time: 2.0
 scenes:
   - name: pictures                # one painting per frame; waits for a key
     mappings:
-      - image: images/great-wave.jpg
-        objects: [1]
-      - image: images/girl-with-a-pearl-earring.jpg
-        objects: [2]
+      - images/great-wave.jpg
+      - images/girl-with-a-pearl-earring.jpg
 
   - name: one-picture-over-both   # one painting running on behind both frames
     mappings:
@@ -32,8 +34,8 @@ scenes:
 
   # - name: a-clip                # put a clip in videos/ to try this
   #   mappings:
-  #     - video: videos/clip.mp4
-  #       objects: [2]
+  #     - null                      # the first frame stays empty
+  #     - videos/clip.mp4
 
   - name: empty-frames            # just the gilded frames
     mappings: []
