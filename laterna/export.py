@@ -27,8 +27,8 @@ the backup after the show's folder (shows/my-show: my-show.pdf, .ppsx, .pptx):
                  or key, the descriptions in the speaker notes
                  (laterna/slides.py; on the plane, without the keystone).
                  Opens as the slide show, marked as final
-  <show>.pptx    the same to work on: the picture files as they are (full
-                 size, only cropped by PowerPoint), text and colours unlit
+  <show>.pptx    the same to work on: the picture files as they are, whole
+                 and uncropped behind the mask, text and colours unlit
   scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
                  blackout, colours and what each object shows (no
                  descriptions: the values only)
@@ -421,6 +421,11 @@ def export_all(
     objects = [shown.scene(scene, medium) for scene in scenes]
     raw = layers.Layers(cfg, renderer, gain, raw=True)
     editable = [raw.scene(scene, medium) for scene in scenes]
+    for scene, objs in zip(scenes, editable):
+        for name, oid in raw.overlaps(objs):
+            progress(
+                f'warning: in the pptx {name} ({scene.get("name", "?")}) reaches into frame {oid}'
+            )
     progress('pictures for the config pages...')
     extras = config_renders(cfg, renderer, scenes, views, gain)
 

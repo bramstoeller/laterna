@@ -73,8 +73,8 @@ In show order, each saving what it sets to `config.yaml`:
    mask with the frames), with the fades, holds, slideshow pictures and
    text lines at their time, the descriptions in the speaker notes;
    `<show>.ppsx` lit as in the show (opens as the slide show, marked as
-   final), `<show>.pptx` to work on (the picture files as they are, text
-   and colours unlit); install the show's font where the slides are shown
+   final), `<show>.pptx` to work on (the picture files as they are, whole
+   and uncropped behind the mask, text and colours unlit); install the show's font where the slides are shown
 8. **DMX**: the desk's source, address and channels, live, and a demo with
    faders on screen
 9. **Present**: play the scenes from `scenes.yaml`

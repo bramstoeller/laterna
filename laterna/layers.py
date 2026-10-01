@@ -19,10 +19,12 @@ plane (no keystone). Back to front:
 A blackout has no objects. Every object can come in later (`fade`): a
 slideshow's pictures and a text's steps at their time.
 
-`raw` (the pptx to work on): the pictures are the files as they are, at
-their full size (only PowerPoint's crop; beyond the picture it stays
-empty), the flat colours and the text in their own colours: no light, no
-spot. The mask stays as lit.
+`raw` (the pptx to work on): the pictures are the files as they are,
+whole and uncropped, placed so that the part the frame shows fills it
+(the rest is under the mask; beyond the picture the frame stays empty),
+the flat colours and the text in their own colours: no light, no spot.
+The mask stays as lit. overlaps() names the pictures that reach into
+another frame's opening (whatever comes later covers it there).
 """
 
 import cv2
@@ -171,11 +173,14 @@ class Layers:
             1 - (cy0 + v1) / ph,
         )
         box = (x0 / self.ss, y0 / self.ss, bw / self.ss, bh / self.ss)
-        if self.raw:
+        if self.raw:  # the whole file, placed so that the part shown fills the frame
             data = data or _jpeg(np.clip(source + 0.5, 0, 255).astype(np.uint8))
             ext = 'png' if data[:4] == b'\x89PNG' else 'jpg'
+            left = x0 - ox + ((cw - (pw - cx0)) if flip else -cx0) * sx
+            top = y0 - oy - cy0 * sy
+            whole = (left / self.ss, top / self.ss, pw * sx / self.ss, ph * sy / self.ss)
             return {
-                'kind': 'pic', 'data': data, 'ext': ext, 'box': box, 'crop': crop_out, 'flip': flip
+                'kind': 'pic', 'data': data, 'ext': ext, 'box': whole, 'crop': None, 'flip': flip
             }  # fmt: skip
         # every pixel of the file lit where it lands on the canvas
         us = np.arange(pw, dtype=np.float64) + 0.5 - cx0
@@ -193,6 +198,24 @@ class Layers:
             'crop': crop_out,
             'flip': flip,
         }
+
+    def overlaps(self, objects):
+        """[(picture name, object id)]: the pictures among a scene's objects
+        that reach into the opening of an object they are not on, where
+        nothing later covers that opening (each picture and plate fills
+        the openings it is on)."""
+        out = []
+        for k, obj in enumerate(objects):
+            if obj['kind'] != 'pic' or 'on' not in obj:
+                continue
+            x, y, w, h = obj['box']
+            for oid, polys in self.r.image_polys.items():
+                if oid in obj['on'] or any(oid in later.get('on', ()) for later in objects[k:]):
+                    continue
+                x0, y0, x1, y1 = self._box(polys)
+                if x < x1 and x + w > x0 and y < y1 and y + h > y0:
+                    out.append((obj['name'], oid))
+        return out
 
     def plate(self, oid, rgb, spot=True, fill=False):
         """A flat colour over object oid's opening, lit there (the fill:
@@ -308,7 +331,7 @@ class Layers:
                 setting = m['_text']
                 back = setting.get('background') or (0, 0, 0)
                 plate = self.plate(m['objects'][0], back, m.get('spot', True))
-                out.append(dict(plate, fade=None, name='text background'))
+                out.append(dict(plate, fade=None, name='text background', on=m['objects']))
                 parts = self.texts(m)
                 times = step_times(m, len(parts) + 1) if 'slideshow' in m else []
                 for p in parts:
@@ -327,11 +350,13 @@ class Layers:
                 if self.raw and not render.is_video_path(path):
                     data = (self.cfg['_dir'] / path).read_bytes()
                 pic = self.photo(shown, picture, data)
-                out.append(dict(pic, fade=fade, name=str(path).split('/')[-1]))
+                out.append(dict(pic, fade=fade, name=str(path).split('/')[-1], on=m['objects']))
         fill = scene.get('fill_color')
         plates = []
         for oid, fills in self.r.fill_base.items():
             if oid not in mapped:
                 rgb = fill if fill is not None else (fills[0][1] if fills else (0, 0, 0))
-                plates.append(dict(self.plate(oid, rgb, fill=True), fade=None, name='fill'))
-        return plates + out + [dict(self.mask(scene), fade=None, name='frames')]
+                plate = self.plate(oid, rgb, fill=True)
+                plates.append(dict(plate, fade=None, name='fill', on=[oid]))
+        # the fills last: a picture reaching beyond its frame never covers them
+        return out + plates + [dict(self.mask(scene), fade=None, name='frames')]
