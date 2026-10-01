@@ -187,13 +187,15 @@ def views(scenes):
     (the light on a blank canvas), then the scenes with blackouts left
     out and a scene with slideshows expanded to one view per slide (the
     k-th image of every slideshow in the scene; video items keep their
-    `video:` and stay black, like video mappings). Each view is a scene
-    dict render() accepts."""
+    `video:` and stay black, like video mappings). A text that comes in
+    line by line shows whole, in every view of its scene. Each view is a
+    scene dict render() accepts."""
     out = [WHITE_VIEW]
     for scene in scenes:
         if scene.get('blackout'):
             continue
-        shows = [m for m in scene.get('mappings', []) if 'slideshow' in m]
+        scene = {**scene, 'mappings': [_whole_text(m) for m in scene.get('mappings', [])]}
+        shows = [m for m in scene['mappings'] if 'slideshow' in m]
         if not shows:
             out.append(scene)
             continue
@@ -221,6 +223,15 @@ def views(scenes):
                 }
             )
     return out
+
+
+def _whole_text(m):
+    """A text mapping that comes in line by line (a slideshow of its steps,
+    laterna/text.py) as its last picture: the whole text."""
+    if 'text' not in m or 'slideshow' not in m:
+        return m
+    keys = ('slideshow', 'hold', 'transition', 'transition_time', 'loop')
+    return {**{k: v for k, v in m.items() if k not in keys}, 'image': m['slideshow'][-1]}
 
 
 def load_views(scenes_path, cfg):
