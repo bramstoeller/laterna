@@ -4,10 +4,11 @@
 Every lit scene as a still, lit at full as Look shows it
 (laterna/look.py): no fades, a slideshow on the picture it ends up on, a
 text that comes in line by line whole; the blackouts are left out (the
-numbers stay the show's, so a gap shows where one is). The scenes render
-in the background when Preview starts, each once, and are kept in
-_cache/preview/ under a key of everything they depend on (Present's
-render key and the stills' scenes), so the next start loads them. Over it all there is to know about
+numbers stay the show's, so a gap shows where one is). The stills come
+from Present's render cache (_cache/, laterna/play.py): when it is valid
+they load at once, else Preview renders the whole show into it in the
+background, the lit scenes as they come, so Present starts without a
+render afterwards. Over it all there is to know about
 the scene: its number and name, its description, how it is reached and
 how the show goes on from it (a key, the desk, by itself after the hold),
 the fades, hold and transition_time, and per frame what it shows (a
@@ -24,17 +25,13 @@ Keys:
 """
 
 import argparse
-import hashlib
-import pathlib
 import threading
 
 import cv2
-import numpy as np
 import pygame
+import yaml
 
-from . import dmx, lamps, look, render, ui
-
-CACHE = pathlib.Path('_cache') / 'preview'  # in the show folder; Present keeps its own beside it
+from . import dmx, lamps, play, render, ui, video
 
 
 def _seconds(t):
@@ -165,10 +162,34 @@ def _wrap(text, width):
     return out + ([line] if line else [])
 
 
-def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=2):
-    """Run the app; with a screen provided, reuse it (menu mode). The lit
-    scenes (blackouts are left out) render in the background from the
-    first on, each once; stepping to one not done yet waits for it."""
+def still(cfg, scene, base, alpha, lut):
+    """The scene as Preview shows it from its render: a slideshow (a text
+    that comes in line by line is one) on the picture it ends up on (the
+    last without loop, else the first), a video on its first frame."""
+    if alpha is None:
+        return base
+    image = base.copy()
+    flat = image.reshape(-1, 3)
+    for spec in video.build_specs(cfg, scene, base, alpha):
+        if spec['kind'] == 'slideshow':
+            count, loop = spec['timing'][0], spec['timing'][3]
+            rows, _ = video._slide_rows(spec, 0 if loop else count - 1, 0.0, lut)
+        else:
+            clip = video.VideoClip(spec['path'])
+            frame = clip.frame_at(0.0)
+            if clip.ok:
+                clip.cap.release()
+            if frame is None:
+                continue
+            rows = video._compose_rows(video._fit_region(frame, spec), spec, lut)
+        flat[spec['flat']] = rows
+    return image
+
+
+def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):
+    """Run the app; with a screen provided, reuse it (menu mode). The
+    stills come from Present's render cache, made here when it is not
+    valid (see the module doc); stepping to one not ready yet waits."""
     cfg = render.load_config(config)
     cfg['look'] = render.look_settings(cfg)
     scenes, fades = render.parse_scenes(render.load_scenes(scenes_path), cfg)
@@ -184,35 +205,52 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
     font = ui.help_font()
     pygame.key.set_repeat()
     lights = lamps.Lamps(cfg)
+    lut = render.gamma_lut(cfg)
     stills = {}  # scene index -> (surface, molding), filled by the worker
     stop = threading.Event()
-    shown = {
-        i: {**scenes[i], 'mappings': [look._still(m) for m in scenes[i]['mappings']]} for i in lit
-    }
-    folder = pathlib.Path(cfg['_dir']) / CACHE
-    key = _key(config, scenes_path, cfg, scenes, shown, supersample)
+    play._stop_worker()  # a Present render still going: never two writing _cache/
+    fp = play._fingerprint(config, scenes_path, cfg, scenes, supersample)
 
-    def worker():
-        if _read(folder / 'key.txt') != key:  # another show state: start over
-            if folder.exists():
-                for old in folder.glob('*.png'):
-                    old.unlink(missing_ok=True)
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / 'key.txt').write_text(key)
-        renderer = None
+    def from_cache():
+        moldings = {}
         for i in lit:
             if stop.is_set():
                 return
-            files = folder / f'scene-{i:02d}.png', folder / f'molding-{i:02d}.png'
-            pair = [_load(f) for f in files]
-            if any(p is None for p in pair):
-                renderer = renderer or render.SceneRenderer(cfg, ss=supersample)
-                pair = [renderer.render(shown[i]), renderer.render_molding(shown[i])]
-                for f, image in zip(files, pair):
-                    _save(f, image)
-            stills[i] = tuple(pair)
+            key = play._molding_key(scenes[i])
+            if key not in moldings:
+                moldings[key] = _rgb(play._molding_file(key))
+            alpha = None
+            if play._has_video(scenes[i]):
+                alpha = cv2.imread(str(play._alpha_file(i)), cv2.IMREAD_GRAYSCALE)
+            base = _rgb(play._scene_file(i))
+            stills[i] = (still(cfg, scenes[i], base, alpha, lut), moldings[key])
 
-    thread = threading.Thread(target=worker, daemon=True)
+    def make_cache():
+        """Every scene rendered into Present's cache (its order and files),
+        the manifest last: only a complete render makes it valid."""
+        play._clear_cache()
+        play.CACHE_DIR.mkdir(exist_ok=True)
+        renderer = render.SceneRenderer(cfg, ss=supersample)
+        moldings = {}
+        for i, scene in enumerate(scenes):
+            if stop.is_set():
+                return
+            base = renderer.render(scene)
+            render.save_png(base, play._scene_file(i))
+            alpha = renderer.video_alpha(scene)
+            if alpha is not None:
+                cv2.imwrite(str(play._alpha_file(i)), alpha)
+            key = play._molding_key(scene)
+            if key != 'blackout' and key not in moldings:
+                moldings[key] = renderer.render_molding(scene)
+                render.save_png(moldings[key], play._molding_file(key))
+            if not _blackout(scene):
+                stills[i] = (still(cfg, scene, base, alpha, lut), moldings[key])
+        if not stop.is_set():
+            play.MANIFEST.write_text(yaml.safe_dump({'fingerprint': fp, 'scenes': len(scenes)}))
+
+    valid = play._manifest_valid(fp, scenes)
+    thread = threading.Thread(target=from_cache if valid else make_cache, daemon=True)
     thread.start()
 
     def show(i, info):
@@ -226,7 +264,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
         pygame.display.flip()
 
     def wait_for(i):
-        """Until scene i is rendered; False when quit meanwhile."""
+        """Until scene i is ready; False when quit meanwhile."""
         while i not in stills:
             screen.fill((0, 0, 0))
             ready = sum(1 for k in lit if k in stills)
@@ -241,77 +279,57 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
                 raise RuntimeError(f'scene {i + 1} could not be rendered')
         return True
 
-    pos, info = 0, True  # pos: the place in `lit`
-    running = wait_for(lit[pos])
-    if running:
-        show(lit[pos], info)
-    while running:
-        event = pygame.event.wait()
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            step = None
-            if event.key in ui.QUIT_KEYS:
+    try:
+        pos, info = 0, True  # pos: the place in `lit`
+        running = wait_for(lit[pos])
+        if running:
+            show(lit[pos], info)
+        while running:
+            event = pygame.event.wait()
+            if event.type == pygame.QUIT:
                 running = False
-                continue
-            if event.key in (pygame.K_RIGHT, pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
-                step = pos + 1
-            elif event.key in (pygame.K_LEFT, pygame.K_BACKSPACE):
-                step = pos - 1
-            elif event.key == pygame.K_HOME:
-                step = 0
-            elif event.key == pygame.K_END:
-                step = len(lit) - 1
-            elif event.key == pygame.K_h:
-                info = not info
-            if step is not None:
-                pos = min(max(step, 0), len(lit) - 1)
-            if not wait_for(lit[pos]):
-                break
-            show(lit[pos], info)
-        elif event.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED):
-            show(lit[pos], info)
-    stop.set()
+            elif event.type == pygame.KEYDOWN:
+                step = None
+                if event.key in ui.QUIT_KEYS:
+                    running = False
+                    continue
+                if event.key in (
+                    pygame.K_RIGHT,
+                    pygame.K_SPACE,
+                    pygame.K_RETURN,
+                    pygame.K_KP_ENTER,
+                ):
+                    step = pos + 1
+                elif event.key in (pygame.K_LEFT, pygame.K_BACKSPACE):
+                    step = pos - 1
+                elif event.key == pygame.K_HOME:
+                    step = 0
+                elif event.key == pygame.K_END:
+                    step = len(lit) - 1
+                elif event.key == pygame.K_h:
+                    info = not info
+                if step is not None:
+                    pos = min(max(step, 0), len(lit) - 1)
+                if not wait_for(lit[pos]):
+                    break
+                show(lit[pos], info)
+            elif event.type in (pygame.VIDEOEXPOSE, pygame.WINDOWEXPOSED):
+                show(lit[pos], info)
+    finally:
+        # the render stops after the scene it is on: no manifest then, so
+        # Present renders anew; never two threads writing _cache/
+        stop.set()
+        thread.join()
     pygame.mouse.set_visible(False)
     if standalone:
         pygame.quit()
 
 
-def _key(config, scenes_path, cfg, scenes, shown, supersample):
-    """What the stills depend on: Present's render key (config, scenes,
-    media, the rendering code) and the scenes as Preview shows them."""
-    from . import play
-
-    h = hashlib.sha256(play._fingerprint(config, scenes_path, cfg, scenes, supersample).encode())
-    h.update(repr(sorted(shown.items())).encode())
-    return h.hexdigest()
-
-
-def _read(path):
-    try:
-        return pathlib.Path(path).read_text()
-    except OSError:
-        return None
-
-
-def _save(path, rgb):
-    """A still as a PNG, by bytes (any path, also on Windows), whole or not
-    at all (written next to it, then renamed)."""
-    ok, png = cv2.imencode('.png', cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-    if ok:
-        part = path.with_name(path.name + '.part')
-        part.write_bytes(png.tobytes())
-        part.replace(path)
-
-
-def _load(path):
-    """A still saved by _save (RGB), or None."""
-    try:
-        data = np.frombuffer(pathlib.Path(path).read_bytes(), np.uint8)
-    except OSError:
-        return None
-    image = cv2.imdecode(data, cv2.IMREAD_COLOR)
-    return None if image is None else cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+def _rgb(path):
+    data = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if data is None:
+        raise FileNotFoundError(path)
+    return cv2.cvtColor(data, cv2.COLOR_BGR2RGB)
 
 
 def self_test(config, scenes_path):
@@ -329,7 +347,7 @@ def main():
     ap = argparse.ArgumentParser(description='The show scene by scene, with all there is to know')
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--scenes', default='scenes.yaml')
-    ap.add_argument('--supersample', type=int, default=2)
+    ap.add_argument('--supersample', type=int, default=3)
     ap.add_argument('--test', action='store_true', help="self-test: print every scene's lines")
     args = ap.parse_args()
     if args.test:
