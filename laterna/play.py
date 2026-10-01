@@ -62,7 +62,9 @@ With a light desk's `scene` channel (laterna/dmx.py) the desk picks the
 scene: when its value changes to 1..the number of scenes the show fades
 from where it is to that scene, with the current scene's
 transition_time; a change during that fade only changes where it goes
-(a blackout crossfades to black). 0, a scene past the last or the scene
+(a blackout crossfades to black). With the master at 0 it goes at once
+(nothing shows; the desk's master does the fading, also when it comes up
+a frame after the scene changed). 0, a scene past the last or the scene
 the show is on do nothing; nor does the value the desk starts with.
 
 With a light desk the master also steps in and out of blackout scenes.
@@ -789,6 +791,8 @@ def run(
         if not wait_for(target):
             return
         fade = fades[idx] if idx < len(fades) else float(scenes[idx]['transition_time'])
+        if desk.receiving and desk.master() < DARK:
+            fade = 0.0  # nothing shows: at once, the desk's master does the fading
         to = wanted = target
         start = now()
         transition_until, transition_span, transition_to = start + fade, fade, to
