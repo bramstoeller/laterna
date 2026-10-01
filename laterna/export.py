@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Export: four PDFs and a pptx of the loaded config.yaml and scenes.yaml,
+"""Export: four PDFs and two slide decks of the loaded config.yaml and scenes.yaml,
 written to _export/ next to config.yaml (laterna/documents.py lays the PDFs
 out), named in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf),
-the backup after the show's folder (shows/my-show: my-show.pdf, my-show.pptx):
+the backup after the show's folder (shows/my-show: my-show.pdf, .ppsx, .pptx):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
@@ -19,13 +19,16 @@ the backup after the show's folder (shows/my-show: my-show.pdf, my-show.pptx):
                  distinct combination of its pictures, a video as its
                  first frame; with the keystone warp of config.yaml, like
                  the presentation (the others show the plane)
-  <show>.pptx    the scenes as slides of objects (laterna/layers.py): the
-                 pictures whole with PowerPoint's crop, text as text, one
-                 mask with the frames; played like the show: fades,
-                 slideshow pictures and text lines at their time, holds
-                 moving on by themselves, the rest on a click or key, the
-                 descriptions in the speaker notes (laterna/slides.py; on
-                 the plane, without the keystone)
+  <show>.ppsx    the scenes as slides of objects (laterna/layers.py), lit
+                 as in the show: the pictures whole with PowerPoint's crop,
+                 text as text, one mask with the frames; played like the
+                 show: fades, slideshow pictures and text lines at their
+                 time, holds moving on by themselves, the rest on a click
+                 or key, the descriptions in the speaker notes
+                 (laterna/slides.py; on the plane, without the keystone).
+                 Opens as the slide show, marked as final
+  <show>.pptx    the same to work on: the picture files as they are (full
+                 size, only cropped by PowerPoint), text and colours unlit
   scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
                  blackout, colours and what each object shows (no
                  descriptions: the values only)
@@ -387,7 +390,7 @@ def dmx_info(cfg):
 def export_all(
     config='config.yaml', scenes_path='scenes.yaml', out_dir=None, supersample=3, progress=print
 ):
-    """Render and write the four PDFs and the pptx; returns their paths. progress(text)
+    """Render and write the four PDFs and the slides; returns their paths. progress(text)
     is called between the steps (and may raise Cancelled)."""
     config, scenes_path = pathlib.Path(config), pathlib.Path(scenes_path)
     cfg = render.load_config(config)
@@ -410,8 +413,14 @@ def export_all(
         progress(f'scene {i + 1}/{len(scenes)}: {scene.get("name", "?")}')
         views.append(scene_views(cfg, renderer, scene, gain, projector))
     progress("the slides' objects...")
-    pieces = layers.Layers(cfg, renderer, gain)
-    objects = [pieces.scene(scene, lambda path: _source(cfg, path)) for scene in scenes]
+
+    def medium(path):
+        return _source(cfg, path)
+
+    shown = layers.Layers(cfg, renderer, gain)
+    objects = [shown.scene(scene, medium) for scene in scenes]
+    raw = layers.Layers(cfg, renderer, gain, raw=True)
+    editable = [raw.scene(scene, medium) for scene in scenes]
     progress('pictures for the config pages...')
     extras = config_renders(cfg, renderer, scenes, views, gain)
 
@@ -420,12 +429,15 @@ def export_all(
     for old in {n for files in FILES.values() for n in files} | OLD_FILES:
         if old not in names and (out / old).exists():
             (out / old).unlink()  # the same document under another name
-    pdf, pptx = out / f'{backup}.pdf', out / f'{backup}.pptx'
+    pdf, ppsx, pptx = (out / f'{backup}.{ext}' for ext in ('pdf', 'ppsx', 'pptx'))
     paths = [out / name for name in names]
     progress(f'writing {pdf.name}...')
     documents.backup(pdf, cfg, scenes, views)
+    name = documents.show_name(cfg)
+    progress(f'writing {ppsx.name}...')
+    slides.write(ppsx, cfg, scenes, fades, objects, f'{name} · backup', final=True)
     progress(f'writing {pptx.name}...')
-    slides.write(pptx, cfg, scenes, fades, objects, f'{documents.show_name(cfg)} · backup')
+    slides.write(pptx, cfg, scenes, fades, editable, f'{name} · to edit')
     progress(f'writing {paths[0].name}...')
     documents.run_sheet(
         paths[0],
@@ -443,7 +455,7 @@ def export_all(
     )
     progress(f'writing {paths[2].name}...')
     documents.scenes_sheet(paths[2], cfg, scenes, fades, data, source)
-    return [pdf, pptx] + paths
+    return [pdf, ppsx, pptx] + paths
 
 
 def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):
@@ -493,7 +505,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
 
 def main():
     ap = argparse.ArgumentParser(
-        description='Export config, cue sheet, backup and scenes as PDF, the backup as pptx (headless)'
+        description='Export config, cue sheet, backup and scenes as PDF, the backup as slides (headless)'
     )
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--scenes', default='scenes.yaml')

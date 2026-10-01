@@ -18,6 +18,11 @@ plane (no keystone). Back to front:
 
 A blackout has no objects. Every object can come in later (`fade`): a
 slideshow's pictures and a text's steps at their time.
+
+`raw` (the pptx to work on): the pictures are the files as they are, at
+their full size (only PowerPoint's crop; beyond the picture it stays
+empty), the flat colours and the text in their own colours: no light, no
+spot. The mask stays as lit.
 """
 
 import cv2
@@ -53,10 +58,12 @@ def step_times(mapping, count):
 
 
 class Layers:
-    def __init__(self, cfg, renderer, gain):
+    def __init__(self, cfg, renderer, gain, raw=False):
         """renderer: a render.SceneRenderer of cfg (its supersampling and
-        molding); gain: the lamps' gain at full light (export.full_light)."""
+        molding); gain: the lamps' gain at full light (export.full_light);
+        raw: the objects unlit, the files as they are (see the module doc)."""
         self.cfg = cfg
+        self.raw = raw
         self.r = renderer
         self.ss = renderer.ss
         self.gain = gain
@@ -117,11 +124,12 @@ class Layers:
 
     # --- the objects -----------------------------------------------------
 
-    def photo(self, mapping, source):
+    def photo(self, mapping, source, data=None):
         """A picture as `mapping` shows it: {'kind': 'pic', 'data' (JPEG),
         'box' (x, y, w, h canvas px), 'crop' (l, t, r, b: the fractions of
         the file PowerPoint crops away), 'flip'}. `source`: the RGB float
-        picture as read (render._load_image), uncropped."""
+        picture as read (render._load_image), uncropped; data: the file's
+        bytes (raw: embedded as they are; None: a JPEG of `source`)."""
         h, w = source.shape[:2]
         crop = mapping.get('crop')
         if crop is None:
@@ -132,6 +140,8 @@ class Layers:
             cx1, cy1 = max(cx1, cx0 + 1), max(cy1, cy0 + 1)
         pad = [max(0, -cy0), max(0, cy1 - h), max(0, -cx0), max(0, cx1 - w)]
         pad = [min(v, (h if k < 2 else w) - 1) for k, v in enumerate(pad)]
+        if self.raw:  # beyond the picture PowerPoint leaves it empty
+            pad = [0, 0, 0, 0]
         if any(pad):
             source = cv2.copyMakeBorder(source, *pad, cv2.BORDER_REFLECT_101)
         cx0, cx1, cy0, cy1 = cx0 + pad[2], cx1 + pad[2], cy0 + pad[0], cy1 + pad[0]
@@ -160,6 +170,13 @@ class Layers:
             1 - (cx0 + u1) / pw,
             1 - (cy0 + v1) / ph,
         )
+        box = (x0 / self.ss, y0 / self.ss, bw / self.ss, bh / self.ss)
+        if self.raw:
+            data = data or _jpeg(np.clip(source + 0.5, 0, 255).astype(np.uint8))
+            ext = 'png' if data[:4] == b'\x89PNG' else 'jpg'
+            return {
+                'kind': 'pic', 'data': data, 'ext': ext, 'box': box, 'crop': crop_out, 'flip': flip
+            }  # fmt: skip
         # every pixel of the file lit where it lands on the canvas
         us = np.arange(pw, dtype=np.float64) + 0.5 - cx0
         vs = np.arange(ph, dtype=np.float64) + 0.5 - cy0
@@ -172,7 +189,7 @@ class Layers:
             'kind': 'pic',
             'data': _jpeg(lit),
             'ext': 'jpg',
-            'box': (x0 / self.ss, y0 / self.ss, bw / self.ss, bh / self.ss),
+            'box': box,
             'crop': crop_out,
             'flip': flip,
         }
@@ -181,6 +198,9 @@ class Layers:
         """A flat colour over object oid's opening, lit there (the fill:
         look.fill and spot.fill; else as a picture): {'kind': 'pic', ...}."""
         x0, y0, x1, y1 = self._box(self.r.image_polys[oid])
+        if self.raw:  # a rectangle in the colour itself
+            colour = tuple(int(v) for v in rgb)
+            return {'kind': 'rect', 'color': colour, 'box': (x0, y0, x1 - x0, y1 - y0)}
         ys, xs = np.mgrid[y0:y1, x0:x1]
         gain = self._gain([oid], xs.ravel() + 0.5, ys.ravel() + 0.5, spot, fill)
         colour = np.asarray(rgb, np.float32) * gain.reshape(y1 - y0, x1 - x0, 3)
@@ -265,8 +285,11 @@ class Layers:
             for k in ('width', 'size', 'ascent', 'descent'):
                 q[k] = p[k] * sy
             at = np.array([q['x'] + q['width'] / 2]), np.array([q['baseline'] - q['ascent'] / 2])
-            lit = self._lit((color * self._gain([oid], *at, spot)[0]).reshape(1, 1, 3))
-            q['color'] = tuple(int(v) for v in lit.reshape(3))
+            if self.raw:
+                q['color'] = tuple(int(v) for v in color)
+            else:
+                lit = self._lit((color * self._gain([oid], *at, spot)[0]).reshape(1, 1, 3))
+                q['color'] = tuple(int(v) for v in lit.reshape(3))
             out.append(q)
         return out
 
@@ -300,7 +323,10 @@ class Layers:
                 shown = m
                 if render.is_video_path(path):  # crop and flip are a picture's
                     shown = {k: v for k, v in m.items() if k not in ('crop', 'flip')}
-                pic = self.photo(shown, picture)
+                data = None
+                if self.raw and not render.is_video_path(path):
+                    data = (self.cfg['_dir'] / path).read_bytes()
+                pic = self.photo(shown, picture, data)
                 out.append(dict(pic, fade=fade, name=str(path).split('/')[-1]))
         fill = scene.get('fill_color')
         plates = []

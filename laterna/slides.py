@@ -134,6 +134,18 @@ def _pic(sid, obj, rid):
     )
 
 
+def _rect(sid, obj):
+    """A rectangle in one colour (raw: a fill, a text's background)."""
+    colour = '{:02X}{:02X}{:02X}'.format(*obj['color'])
+    return (
+        f'<p:sp><p:nvSpPr><p:cNvPr id="{sid}" name={quoteattr(obj["name"])}/><p:cNvSpPr/>'
+        f'<p:nvPr/></p:nvSpPr><p:spPr>{_xfrm(obj["box"])}'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+        f'<a:solidFill><a:srgbClr val="{colour}"/></a:solidFill><a:ln><a:noFill/></a:ln>'
+        '</p:spPr></p:sp>'
+    )
+
+
 ALIGN = {'left': 'l', 'center': 'ctr', 'right': 'r'}
 
 
@@ -285,9 +297,18 @@ TITLE_STYLES = (
 )
 
 
-def write(path, cfg, scenes, fades, objects, title):
-    """Write the backup pptx: a slide per scene, of its objects
-    (layers.Layers.scene, one list per scene)."""
+CUSTOM = (
+    f'{HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/'
+    'custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/'
+    'docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" '
+    'name="_MarkAsFinal"><vt:bool>true</vt:bool></property></Properties>'
+)
+
+
+def write(path, cfg, scenes, fades, objects, title, final=False):
+    """Write the backup slides: a slide per scene, of its objects
+    (layers.Layers.scene, one list per scene). final: a .ppsx that opens
+    as the slide show, marked as final (PowerPoint opens it read-only)."""
     w, h = cfg['canvas']
     cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
     lang = {'nl': 'nl-NL'}.get(cfg.get('language') or 'en', 'en-GB')
@@ -301,7 +322,7 @@ def write(path, cfg, scenes, fades, objects, title):
 
     parts = {}
     types = [
-        ('presentation.main+xml', '/ppt/presentation.xml'),
+        ('slideshow.main+xml' if final else 'presentation.main+xml', '/ppt/presentation.xml'),
         ('slideMaster+xml', '/ppt/slideMasters/slideMaster1.xml'),
         ('slideLayout+xml', '/ppt/slideLayouts/slideLayout1.xml'),
         ('notesMaster+xml', '/ppt/notesMasters/notesMaster1.xml'),
@@ -312,13 +333,21 @@ def write(path, cfg, scenes, fades, objects, title):
         f'<Relationship Id="rId1" Type="{REL}officeDocument" Target="ppt/presentation.xml"/>'
         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/'
         'relationships/metadata/core-properties" Target="docProps/core.xml"/>'
-        '</Relationships>'
+        + (
+            f'<Relationship Id="rId3" Type="{REL}custom-properties" Target="docProps/custom.xml"/>'
+            if final
+            else ''
+        )
+        + '</Relationships>'
     )
+    if final:
+        parts['docProps/custom.xml'] = CUSTOM
     parts['docProps/core.xml'] = (
         f'{HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/'
         'metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">'
         f'<dc:title>{escape(title)}</dc:title><dc:creator>laterna projection export</dc:creator>'
-        '</cp:coreProperties>'
+        + ('<cp:contentStatus>Final</cp:contentStatus>' if final else '')
+        + '</cp:coreProperties>'
     )
     parts['ppt/presentation.xml'] = (
         f'{HEAD}<p:presentation {XMLNS}>'
@@ -380,6 +409,9 @@ def write(path, cfg, scenes, fades, objects, title):
             if obj['kind'] == 'text':
                 shapes.append((_text(sid, obj, lang), obj['fade'], True))
                 continue
+            if obj['kind'] == 'rect':
+                shapes.append((_rect(sid, obj), obj['fade'], False))
+                continue
             digest = hashlib.sha1(obj['data']).hexdigest()
             if digest not in media:
                 media[digest] = (f'ppt/media/image{len(media) + 1}.{obj["ext"]}', obj['data'])
@@ -410,6 +442,12 @@ def write(path, cfg, scenes, fades, objects, title):
         + (
             '<Override PartName="/docProps/core.xml" '
             'ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+        )
+        + (
+            '<Override PartName="/docProps/custom.xml" ContentType="application/'
+            'vnd.openxmlformats-officedocument.custom-properties+xml"/>'
+            if final
+            else ''
         )
     )
     content_types = (
