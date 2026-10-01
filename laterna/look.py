@@ -5,10 +5,10 @@
 Shows the scenes from scenes.yaml as the presentation renders them (no
 fades; video polygons stay black here) and lets you tune, live. The
 first view has every canvas white (the light itself, on a blank
-canvas). Blackout scenes are skipped (nothing to look at) and a scene
-with slideshows is shown once per slide: view k has every slideshow of
-the scene on its k-th image (shorter ones wrap), so each image gets
-seen. Tune:
+canvas). Then one view per scene: blackouts are skipped (nothing to
+look at), a slideshow shows the picture it ends up on (the last without
+loop, else the first) and a text that comes in line by line shows
+whole. Tune:
 
   brightness of the molding, of the fill colours and of the images/videos
   colour temperature of the light (K; 3200 = tungsten warm); not in the
@@ -184,54 +184,28 @@ WHITE_VIEW = {'name': 'white canvases', 'fill_color': (255, 255, 255), 'mappings
 
 def views(scenes):
     """The scenes as the look app shows them: first every canvas white
-    (the light on a blank canvas), then the scenes with blackouts left
-    out and a scene with slideshows expanded to one view per slide (the
-    k-th image of every slideshow in the scene; video items keep their
-    `video:` and stay black, like video mappings). A text that comes in
-    line by line shows whole, in every view of its scene. Each view is a
-    scene dict render() accepts."""
+    (the light on a blank canvas), then one view per scene, blackouts left
+    out. A slideshow shows as it ends up: without loop its last picture,
+    else its first; a text that comes in line by line whole. Video items
+    keep their `video:` and stay black, like video mappings. Each view is
+    a scene dict render() accepts."""
     out = [WHITE_VIEW]
     for scene in scenes:
-        if scene.get('blackout'):
-            continue
-        scene = {**scene, 'mappings': [_whole_text(m) for m in scene.get('mappings', [])]}
-        shows = [m for m in scene['mappings'] if 'slideshow' in m]
-        if not shows:
-            out.append(scene)
-            continue
-        count = max(len(m['slideshow']) for m in shows)
-        for k in range(count):
-            mappings = []
-            for m in scene['mappings']:
-                if 'slideshow' in m:
-                    n = len(m['slideshow'])
-                    item = m['slideshow'][k % n if m.get('loop', True) else min(k, n - 1)]
-                    m = {
-                        **{
-                            key: v
-                            for key, v in m.items()
-                            if key not in ('slideshow', 'hold', 'transition', 'transition_time')
-                        },
-                        ('video' if render.is_video_path(item) else 'image'): item,
-                    }
-                mappings.append(m)
-            out.append(
-                {
-                    **scene,
-                    'name': f'{scene.get("name", "?")} [{k + 1}/{count}]',
-                    'mappings': mappings,
-                }
-            )
+        if not scene.get('blackout'):
+            out.append({**scene, 'mappings': [_still(m) for m in scene.get('mappings', [])]})
     return out
 
 
-def _whole_text(m):
-    """A text mapping that comes in line by line (a slideshow of its steps,
-    laterna/text.py) as its last picture: the whole text."""
-    if 'text' not in m or 'slideshow' not in m:
+def _still(m):
+    """A slideshow mapping (a text that comes in line by line is one too,
+    laterna/text.py) as the picture it ends up on: without loop its last,
+    else its first."""
+    if 'slideshow' not in m:
         return m
+    item = m['slideshow'][-1 if m.get('loop', True) is False else 0]
     keys = ('slideshow', 'hold', 'transition', 'transition_time', 'loop')
-    return {**{k: v for k, v in m.items() if k not in keys}, 'image': m['slideshow'][-1]}
+    medium = 'video' if render.is_video_path(item) else 'image'
+    return {**{k: v for k, v in m.items() if k not in keys}, medium: item}
 
 
 def load_views(scenes_path, cfg):
