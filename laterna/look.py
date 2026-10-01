@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""Look: brightness per layer and the pretend spotlights (`look` in config.yaml).
+"""Look: brightness per layer, the pretend spotlights and the molding (config.yaml
+`look`, `border`, `light`).
 
 Shows the scenes from scenes.yaml as the presentation renders them (no
 fades; video polygons stay black here) and lets you tune, live. The
@@ -17,20 +18,25 @@ seen. Tune:
   the spot on every frame (the frames are not lit by real spots because of
   the projection, so we pretend): the picture spot (`spot`: a gaussian pool
   or a cone lamp close to the frame) and, when configured, the molding's
-  own spot (`molding_spot`). Settings come in pages, Tab cycles them.
+  own spot (`molding_spot`)
+  the molding itself: its profile, relief and shadow on the picture
+  (`border`) and the light it is shaded by (`light`: where it comes from,
+  ambient, gloss, patina); a step there shades the molding anew (a few
+  seconds)
+Settings come in pages, Tab cycles them.
 
 Everything shows at full light, without the desk: the desk and its
 faders are the DMX app's (laterna/desk.py).
 
 Keys:
   1..9, 0        select a setting on the current page (see the overlay)
-  Tab            next page (look / picture spot / molding spot)
+  Tab            next page (look / picture spot / molding spot / molding)
   up / down      adjust the selected setting  (with Shift: x5)
   left / right   previous / next scene
   T              reset all settings to the values at startup
   S              save to config.yaml
   R              reload config.yaml and rebuild the molding (after editing
-                 `light`/`border` by hand); unsaved look changes are lost
+                 it by hand); unsaved changes are lost
 
 Other:
   H  help overlay on/off
@@ -45,50 +51,68 @@ import pygame
 
 from . import calibration, dmx, lamps, render, ui
 
-# Settings come in pages (Tab cycles them): label, path into cfg['look'],
-# step, minimum, maximum. Keys 1..9 and 0 select within the page.
+# Settings come in pages (Tab cycles them): label, path into cfg, step,
+# minimum, maximum; or for a choice: label, path, None, the choices, None.
+# Keys 1..9 and 0 select within the page.
 PAGE_LOOK = (
     'look',
     [
-        ('molding brightness', ('molding',), 0.05, 0.0, 3.0),
-        ('fill brightness', ('fill',), 0.05, 0.0, 3.0),
-        ('image brightness', ('images',), 0.05, 0.0, 3.0),
-        ('colour temperature (K)', ('temperature',), 100.0, 1500.0, 10000.0),
-        ('projector white (K)', ('white',), 100.0, 3000.0, 10000.0),
-        ('pool flattens when dim', ('spot_collapse',), 0.05, 0.0, 1.0),
-        ('spot strength', ('spot', 'strength'), 0.05, 0.0, 1.0),
-        ('spot on images', ('spot', 'images'), 0.05, 0.0, 1.0),
-        ('spot on fill', ('spot', 'fill'), 0.05, 0.0, 1.0),
-        ('frame depth (mm, 0 = off)', ('frame_depth',), 1.0, 0.0, 50.0),
+        ('molding brightness', ('look', 'molding'), 0.05, 0.0, 3.0),
+        ('fill brightness', ('look', 'fill'), 0.05, 0.0, 3.0),
+        ('image brightness', ('look', 'images'), 0.05, 0.0, 3.0),
+        ('colour temperature (K)', ('look', 'temperature'), 100.0, 1500.0, 10000.0),
+        ('projector white (K)', ('look', 'white'), 100.0, 3000.0, 10000.0),
+        ('pool flattens when dim', ('look', 'spot_collapse'), 0.05, 0.0, 1.0),
+        ('spot strength', ('look', 'spot', 'strength'), 0.05, 0.0, 1.0),
+        ('spot on images', ('look', 'spot', 'images'), 0.05, 0.0, 1.0),
+        ('spot on fill', ('look', 'spot', 'fill'), 0.05, 0.0, 1.0),
+        ('frame depth (mm, 0 = off)', ('look', 'frame_depth'), 1.0, 0.0, 50.0),
     ],
 )
+# the molding's shape and light: a step here shades the molding anew
+PAGE_MOLDING = (
+    'molding',
+    [
+        ('profile', ('border', 'profile'), None, list(render.PROFILES), None),
+        ('relief (mm)', ('border', 'relief'), 2.0, 0.0, 100.0),
+        ('shadow on the picture', ('border', 'shadow'), 0.05, 0.0, 1.0),
+        ('light from (deg)', ('light', 'azimuth'), 15.0, 0.0, 345.0),
+        ('light elevation (deg)', ('light', 'elevation'), 5.0, 5.0, 90.0),
+        ('ambient', ('light', 'ambient'), 0.05, 0.0, 1.0),
+        ('gloss strength', ('light', 'specular'), 0.05, 0.0, 2.0),
+        ('gloss sharpness', ('light', 'shininess'), 2.0, 1.0, 100.0),
+        ('patina', ('light', 'patina'), 0.02, 0.0, 1.0),
+    ],
+)
+MOLDING_KEYS = ('border', 'light')  # a change under these rebuilds the molding
 
 
 def _spot_page(name, key, spot):
     """Geometry settings of one spot dict (cfg['look'][key])."""
+    key = ('look', key)
     if spot.get('type', 'gaussian') == 'cone':
         return (
             f'{name} (cone)',
             [
-                ('strength', (key, 'strength'), 0.05, 0.0, 1.0),
-                ('lamp x (0.5 = centre)', (key, 'position', 0), 0.05, -1.0, 2.0),
-                ('lamp height (1 = top)', (key, 'position', 1), 0.05, -1.0, 2.0),
-                ('aim x', (key, 'aim', 0), 0.05, -1.0, 2.0),
-                ('aim height', (key, 'aim', 1), 0.05, -1.0, 2.0),
-                ('distance (x width)', (key, 'distance'), 0.05, 0.05, 5.0),
-                ('beam half-angle (deg)', (key, 'angle'), 1.0, 1.0, 89.0),
-                ('softness', (key, 'softness'), 0.05, 0.0, 1.0),
-                ('falloff', (key, 'falloff'), 0.1, 0.0, 3.0),
+                ('strength', (*key, 'strength'), 0.05, 0.0, 1.0),
+                ('lamp x (0.5 = centre)', (*key, 'position', 0), 0.05, -1.0, 2.0),
+                ('lamp height (1 = top)', (*key, 'position', 1), 0.05, -1.0, 2.0),
+                ('aim x', (*key, 'aim', 0), 0.05, -1.0, 2.0),
+                ('aim height', (*key, 'aim', 1), 0.05, -1.0, 2.0),
+                ('distance (x width)', (*key, 'distance'), 0.05, 0.05, 5.0),
+                ('beam half-angle (deg)', (*key, 'angle'), 1.0, 1.0, 89.0),
+                ('softness', (*key, 'softness'), 0.05, 0.0, 1.0),
+                ('falloff', (*key, 'falloff'), 0.1, 0.0, 3.0),
             ],
         )
     return (
         f'{name} (gaussian)',
         [
-            ('strength', (key, 'strength'), 0.05, 0.0, 1.0),
-            ('centre x (0.5 = centre)', (key, 'position', 0), 0.05, -1.0, 2.0),
-            ('centre height (1 = top)', (key, 'position', 1), 0.05, -1.0, 2.0),
-            ('width (sigma / width)', (key, 'size', 0), 0.05, 0.05, 3.0),
-            ('spread (sigma / height)', (key, 'size', 1), 0.05, 0.05, 3.0),
+            ('strength', (*key, 'strength'), 0.05, 0.0, 1.0),
+            ('centre x (0.5 = centre)', (*key, 'position', 0), 0.05, -1.0, 2.0),
+            ('centre height (1 = top)', (*key, 'position', 1), 0.05, -1.0, 2.0),
+            ('width (sigma / width)', (*key, 'size', 0), 0.05, 0.05, 3.0),
+            ('spread (sigma / height)', (*key, 'size', 1), 0.05, 0.05, 3.0),
         ],
     )
 
@@ -98,7 +122,22 @@ def pages(look):
     out = [PAGE_LOOK, _spot_page('picture spot', 'spot', look['spot'])]
     if look.get('molding_spot'):
         out.append(_spot_page('molding spot', 'molding_spot', look['molding_spot']))
+    out.append(PAGE_MOLDING)
     return out
+
+
+def complete(cfg):
+    """cfg with every setting the pages edit present: look completed,
+    border and light with their defaults (render.BORDER_DEFAULTS, ...)."""
+    cfg['look'] = render.look_settings(cfg)
+    cfg['border'] = {**render.BORDER_DEFAULTS, **(cfg.get('border') or {})}
+    cfg['light'] = {**render.LIGHT_DEFAULTS, **(cfg.get('light') or {})}
+    return cfg
+
+
+def editable(cfg):
+    """What T restores: copies of the parts the pages edit."""
+    return {key: copy.deepcopy(cfg[key]) for key in ('look', *MOLDING_KEYS)}
 
 
 # keys 1..9 select settings 0..8, key 0 the tenth
@@ -106,24 +145,38 @@ SELECT_KEYS = {getattr(pygame, f'K_{i}'): (i - 1) % 10 for i in range(0, 10)}
 SELECT_KEYS.update({getattr(pygame, f'K_KP_{i}'): (i - 1) % 10 for i in range(0, 10)})
 
 
-def _slot(look, path):
-    """(container, key) for a settings path inside the look dict."""
-    node = look
+def _slot(cfg, path):
+    """(container, key) for a settings path inside cfg."""
+    node = cfg
     for key in path[:-1]:
         node = node[key]
     return node, path[-1]
 
 
-def get_value(look, setting):
-    node, key = _slot(look, setting[1])
-    return float(node[key])
+def get_value(cfg, setting):
+    node, key = _slot(cfg, setting[1])
+    return node[key] if setting[2] is None else float(node[key])
 
 
-def adjust(look, setting, steps):
-    """Step a setting by `steps` increments, clamped to its range."""
+def show_value(cfg, setting):
+    """The value as the overlay shows it; a custom profile (points) is 'custom'."""
+    value = get_value(cfg, setting)
+    if setting[2] is None:
+        return value if isinstance(value, str) else 'custom'
+    return f'{value:g}'
+
+
+def adjust(cfg, setting, steps):
+    """Step a setting by `steps` increments, clamped to its range; a choice
+    by `steps` places along its choices (from a custom one: the first)."""
     _, path, step, lo, hi = setting
-    node, key = _slot(look, path)
-    node[key] = round(min(hi, max(lo, float(node[key]) + steps * step)), 4)
+    node, key = _slot(cfg, path)
+    if step is None:
+        choices = lo
+        at = choices.index(node[key]) if node[key] in choices else -1 if steps > 0 else 0
+        node[key] = choices[(at + steps) % len(choices)]
+    else:
+        node[key] = round(min(hi, max(lo, float(node[key]) + steps * step)), 4)
 
 
 WHITE_VIEW = {'name': 'white canvases', 'fill_color': (255, 255, 255), 'mappings': []}
@@ -177,11 +230,13 @@ def load_views(scenes_path, cfg):
 
 def self_test(cfg, scenes_path):
     """Headless check: one render plus the edit functions; does not save."""
-    cfg['look'] = render.look_settings(cfg)
+    complete(cfg)
     scenes = load_views(scenes_path, cfg)
     look_page, spot_page = pages(cfg['look'])[:2]
-    adjust(cfg['look'], spot_page[1][0], 7)  # spot strength +0.35
-    adjust(cfg['look'], look_page[1][0], -2)  # molding brightness -0.1
+    adjust(cfg, spot_page[1][0], 7)  # spot strength +0.35
+    adjust(cfg, look_page[1][0], -2)  # molding brightness -0.1
+    adjust(cfg, PAGE_MOLDING[1][0], 1)  # the next profile
+    adjust(cfg, PAGE_MOLDING[1][3], 2)  # the light 30 degrees on
     renderer = render.SceneRenderer(cfg, ss=2)
     # what the lamps do at full light: the headroom back, in the light's colour
     gain = render.headroom_gain(cfg) * render.white_gain(
@@ -198,9 +253,8 @@ def self_test(cfg, scenes_path):
 
 def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):
     """Run the app; with a screen provided, reuse it (menu mode)."""
-    cfg = render.load_config(config)
-    cfg['look'] = render.look_settings(cfg)  # complete, so every setting exists
-    snap = copy.deepcopy(cfg['look'])
+    cfg = complete(render.load_config(config))  # every setting exists
+    snap = editable(cfg)
     scenes = load_views(scenes_path, cfg)
     ids = [o['id'] for o in cfg['objects']]
 
@@ -251,9 +305,7 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
             lines.append(f'[{title}]  page {page % len(all_pages) + 1}/{len(all_pages)} (Tab)')
             for i, setting in enumerate(settings):
                 mark = '>' if i == selected else ' '
-                lines.append(
-                    f'{mark} {(i + 1) % 10}  {setting[0]:<24s} {get_value(cfg["look"], setting):g}'
-                )
+                lines.append(f'{mark} {(i + 1) % 10}  {setting[0]:<24s} {show_value(cfg, setting)}')
             lines += [
                 '1-9, 0 select  up/down adjust (Shift = x5)  Tab page  left/right scene',
                 'T reset  S save  R reload config  H help  Q quit',
@@ -284,12 +336,12 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
                 all_pages = pages(cfg['look'])
                 settings = all_pages[page % len(all_pages)][1]
                 if selected < len(settings):
-                    adjust(
-                        cfg['look'],
-                        settings[selected],
-                        steps if event.key == pygame.K_UP else -steps,
-                    )
+                    setting = settings[selected]
+                    steps = 1 if setting[2] is None else steps  # a choice: one at a time
+                    adjust(cfg, setting, steps if event.key == pygame.K_UP else -steps)
                     dirty = True
+                    if setting[1][0] in MOLDING_KEYS:
+                        renderer = build_renderer()
                     rerender()
             elif event.key == pygame.K_RIGHT:
                 idx = min(idx + 1, len(scenes) - 1)
@@ -298,18 +350,20 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
                 idx = max(idx - 1, 0)
                 rerender()
             elif event.key == pygame.K_t:
-                cfg['look'] = copy.deepcopy(snap)
+                molding_changed = any(cfg[k] != snap[k] for k in MOLDING_KEYS)
+                cfg.update(copy.deepcopy(snap))
                 dirty = True
                 message = 'settings reset to startup values'
+                if molding_changed:
+                    renderer = build_renderer()
                 rerender()
             elif event.key == pygame.K_s:
                 calibration.save_config(cfg, config)
                 dirty = False
                 message = f'saved to {config}'
             elif event.key == pygame.K_r:
-                cfg = render.load_config(config)
-                cfg['look'] = render.look_settings(cfg)
-                snap = copy.deepcopy(cfg['look'])
+                cfg = complete(render.load_config(config))
+                snap = editable(cfg)
                 scenes = load_views(scenes_path, cfg)
                 idx = min(idx, len(scenes) - 1)
                 renderer = build_renderer()

@@ -22,6 +22,18 @@ import yaml
 
 from . import frame, schema
 
+# The molding's shape and its light (config.yaml `border:` / `light:`), as far
+# as config.yaml does not set them; the Look app's molding page edits them
+BORDER_DEFAULTS = {'profile': 'molding', 'relief': 40.0, 'shadow': 0.0}
+LIGHT_DEFAULTS = {
+    'azimuth': 135.0,
+    'elevation': 40.0,
+    'ambient': 0.25,
+    'specular': 0.5,
+    'shininess': 24.0,
+    'patina': 0.0,
+}
+
 # Border profiles: cross-section of the molding as [t, height] points, t=0 at
 # the outer edge, t=1 at the inner side; height 0..1 is scaled by border.relief.
 PROFILES = {
@@ -426,8 +438,8 @@ def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=(), round_ca
     if len(canvas_px):
         molding &= ~_fill_mask(shape, canvas_px)
     t = np.clip(best_t, 0.0, 1.0)
-    relief = float(border.get('relief', 40.0))
-    profile = profile_evaluator(border.get('profile', 'molding'))
+    relief = float(border.get('relief', BORDER_DEFAULTS['relief']))
+    profile = profile_evaluator(border.get('profile', BORDER_DEFAULTS['profile']))
     height = (profile(t) * relief).astype(np.float32)
     # soften the piecewise-linear profile kinks (~1.5 output px) so the
     # molding shades smoothly instead of in facets
@@ -443,7 +455,7 @@ def compute_molding(shape, polys_px, strokes_px, cfg, ss, canvas_px=(), round_ca
     # away from the light: the silhouette of the round frame (the molding
     # with round sight edges, as it pretends to be) shifted and blurred
     fade = np.ones(shape, np.float32)
-    strength = float(border.get('shadow', 0.0))
+    strength = float(border.get('shadow', BORDER_DEFAULTS['shadow']))
     if strength > 0:
         lx, ly, lz = _global_light_dir(light)
         horizontal = max(math.hypot(lx, ly), 1e-6)
@@ -480,8 +492,8 @@ def _global_light_dir(light):
     """Unit vector towards the light, image coordinates (x right, y down,
     z towards the viewer). Azimuth: direction the light comes from; 0 =
     right, 90 = top, 180 = left. Elevation: angle above the plane."""
-    az = math.radians(float(light.get('azimuth', 135.0)))
-    el = math.radians(float(light.get('elevation', 40.0)))
+    az = math.radians(float(light.get('azimuth', LIGHT_DEFAULTS['azimuth'])))
+    el = math.radians(float(light.get('elevation', LIGHT_DEFAULTS['elevation'])))
     return (math.cos(az) * math.cos(el), -math.sin(az) * math.cos(el), math.sin(el))
 
 
@@ -502,14 +514,14 @@ def _shade_relief(height, mmpp, relief, light, ss):
     hx, hy, hz = lx, ly, lz + 1.0
     hn = math.sqrt(hx * hx + hy * hy + hz * hz)
     n_dot_h = np.clip((-gx * hx - gy * hy + hz) / (norm * hn), 0.0, 1.0)
-    shininess = float(light.get('shininess', 24.0))
-    highlight = float(light.get('specular', 0.5)) * n_dot_h**shininess
+    shininess = float(light.get('shininess', LIGHT_DEFAULTS['shininess']))
+    highlight = float(light.get('specular', LIGHT_DEFAULTS['specular'])) * n_dot_h**shininess
 
-    ambient = float(light.get('ambient', 0.25))
+    ambient = float(light.get('ambient', LIGHT_DEFAULTS['ambient']))
     cavity = 0.5 + 0.5 * np.clip(height / max(relief, 1e-6), 0.0, 1.0)
     shade = ambient * cavity + (1.0 - ambient) * diffuse
 
-    patina = float(light.get('patina', 0.0))
+    patina = float(light.get('patina', LIGHT_DEFAULTS['patina']))
     if patina > 0:
         h, w = height.shape
         rng = np.random.default_rng(7)
