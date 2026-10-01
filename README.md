@@ -97,7 +97,9 @@ one. laterna sets the text as large as fits the frame's opening:
 Also `color`, `background`, `align` (left, center, right), `valign` (top,
 middle, bottom), `size` (mm, or `auto`), `line_height` (or `auto`) and
 `margin` (one fraction of the opening's width, or `[top, right, bottom,
-left]`); every option may be `null` for its default. A line can stand
+left]`); every option may be `null` for its default. A line given as a
+list, `["Zo loopt het altijd af.", " Met de dood."]`, comes in part by
+part on the same line. A line can stand
 at a place of its own: `{text: "…", x: …, y: …}` in the frame's mm (x from
 its middle, y up from the bottom of the wood). See `laterna/text.py`. A slideshow can stop on its last picture with
 `loop: false`.
