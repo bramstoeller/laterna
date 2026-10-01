@@ -105,8 +105,8 @@ TEXTS = {
         'nl': 'wacht op een toets',
     },
     'block.blue_means': {
-        'en': 'waiting for DMX: the master to 0 (a picture before a blackout) or up (a blackout)',
-        'nl': 'wacht op DMX: master naar 0 (beeld voor een blackout) of omhoog (blackout)',
+        'en': 'waits for the desk (or a key): the master to 0 before a blackout, up in one',
+        'nl': 'wacht op de tafel (of een toets): master naar 0 voor een blackout, omhoog in een blackout',
     },
     'block.grey_means': {
         'en': 'top left: the progress of a slideshow or video',

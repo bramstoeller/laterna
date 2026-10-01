@@ -23,11 +23,11 @@ Keys:
 
 A small bar in the top right corner tells the operator what the show is
 doing: red while a transition runs, orange while a scene's hold runs,
-green when it waits for a key, dim blue when the desk's master can take
-it on (a key still can too): in a blackout with the master at 0 (the
-master coming up goes on) and on a picture before a blackout once the
-master has been up (the master going to 0 goes into the blackout; see
-below). It is a row of
+green when it waits for a key, blue where the desk's master takes it on
+(a key still can too; with or without a desk, so a run-through shows
+where the show will wait for it): in a blackout with a scene after it
+(the master coming up goes on) and on a picture before a blackout (the
+master going to 0 goes into the blackout; see below). It is a row of
 2 x 2 px blocks 2 px apart: one in the corner plus, darker, one for every
 whole second left (rounded down: the last second shows the corner block
 alone), so red and orange lose a block per second towards the corner;
@@ -137,7 +137,7 @@ TRIGGER_FIRED_S = 2.0  # how long that arrow shows, seconds
 STATE_FADE = ((255, 0, 0), (128, 0, 0))  # a transition runs
 STATE_HOLD = ((255, 128, 0), (128, 64, 0))  # a scene hold runs
 STATE_KEY = ((0, 255, 0), (0, 128, 0))  # waiting for a key
-STATE_DESK = ((0, 0, 255), (0, 0, 255))  # the desk's master takes the show on (up or to 0)
+STATE_DESK = ((0, 0, 255), (0, 0, 255))  # the desk's master takes the show on here (up or to 0)
 STATE_CLIP = ((128, 128, 128), (128, 128, 128))  # the clips' own bars, left, flat grey
 STATE_LEVELS = (1.0, 0.5, 0.0)  # full, half, off
 BAR_TICK_MS = 250  # redraw interval during a hold (1 px of bar)
@@ -665,13 +665,13 @@ def run(
         elif hold_until is not None:
             bar(0, STATE_HOLD, hold_until - now(), scenes[idx].get('hold') or 0.0)
         else:
-            # blue: the desk can take the show on (a key still can too): a
-            # blackout with the master at 0 waits for it to come up, a picture
-            # before a blackout, once the master has been up, for it to go to 0
-            _, waiting, armed = trigger_state()
-            waits_for_desk = (master_dark and _is_blackout(scenes[idx]) and idx + 1 < total) or (
-                waiting == 'down' and armed
-            )
+            # blue where the desk takes the show on (a key still can too),
+            # with or without a desk, so a run-through shows where the show
+            # will wait for it: a blackout with a scene after it (the master
+            # coming up), a picture before a blackout (the master going to 0)
+            here = _is_blackout(scenes[idx])
+            after = idx + 1 < total and _is_blackout(scenes[idx + 1])
+            waits_for_desk = idx + 1 < total and (here or after)
             bar(0, STATE_DESK if waits_for_desk else STATE_KEY, 0.0)
         clips = clip_states(idx)  # the clips, top left, on one shared step
         if clips:
