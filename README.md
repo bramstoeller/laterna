@@ -62,10 +62,12 @@ In show order, each saving what it sets to `config.yaml`:
 3. **Global alignment**: keystone (only for a tilted projector), then scale,
    rotation and position of the image
 4. **Shape calibration**: move the frames' corners onto the real frames
-5. **Look**: brightness per layer, spotlights, colour temperature
+5. **Look**: brightness per layer, spotlights, colour temperature, and the
+   molding's profile and light
 6. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF,
    and the backup as slides with fades and holds (`<show>.pptx`)
-7. **DMX**: the desk's channels live, and a demo with faders on screen
+7. **DMX**: the desk's source, address and channels, live, and a demo with
+   faders on screen
 8. **Present**: play the scenes from `scenes.yaml`
 
 Q / Esc goes back: from an app to the show's menu, from there to the

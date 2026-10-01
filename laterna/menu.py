@@ -16,7 +16,7 @@ The apps, in show order:
   4  shape calibration (align objects with the frames -> config.yaml)
   5  look              (brightness per layer, spotlights -> config.yaml)
   6  export            (config, cue sheet, backup and scenes as PDF, backup as pptx -> _export/)
-  7  dmx               (the desk's channels live, and a demo with the faders)
+  7  dmx               (the desk: source, address, channels -> config.yaml; a demo with faders)
   8  present           (play the scenes from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse

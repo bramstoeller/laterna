@@ -3,71 +3,187 @@
 
 Two pages, Tab switches:
 
-  channels the desk as config.yaml `dmx:` has it: the source and its
-           signal, the fixture's channels (absolute, offset, function)
-           with their values live
+  channels the desk as config.yaml `dmx:` has it, to set up: the source
+           and its signal, then the settings, each with its value live
+           where it is a channel: source, address, master, cct, per frame
+           its canvas and frame channel (0 = none), start and the dimmer
+           curve. up / down picks one, left / right changes it (Shift: x10),
+           at once (the desk follows; an address that runs past 512 is
+           refused); S saves what changed into config.yaml's `dmx:`, T
+           goes back to the values at the start
   demo     the scenes (as Look shows them, laterna/look.py) under the
            desk's channels, with the faders on screen (laterna/faders.py):
            they follow the desk and can be dragged, or selected with 1..9
-           and nudged with up/down (on the channels page too, unseen) (held down the key repeats, so the
+           and nudged with up/down (held down the key repeats, so the
            fader slides; with Shift five times as fast); left / right
            steps through the scenes
 
-Nothing is saved here: it is there to check the cable and the patch and
-to try the faders, from the desk, the keys or the mouse.
-
 Keys:
   Tab            next page
+  up / down      a setting (channels) / move the fader (demo, Shift: x5)
+  left / right   change the setting (channels, Shift: x10) / scene (demo)
   1..9           select a fader (demo)
-  up / down      move it (Shift: x5)
-  left / right   previous / next scene (demo)
+  S / T          save the settings / back to the start (channels)
   H              help on/off
   Q / ESC        quit (back to the menu)
 """
 
 import argparse
 import collections
+import copy
 import time
 
 import pygame
 
-from . import dmx, faders, lamps, look, render, ui
+from . import calibration, dmx, faders, lamps, look, render, ui
 
 PAGES = ('channels', 'demo')
 REPEAT = (300, 30)  # ms before the first key repeat, ms between: ~33 values/s
 TEXT = (200, 190, 170)
 DIM = (130, 120, 105)
 HAND = faders.HAND
+SELECTED = faders.SELECTED
+STARTS = ('full', 'desk')
+CURVE = (0.1, 0.5, 4.0)  # step, lowest, highest
 
 
-def channel_lines(desk):
-    """The channels page as [(text, colour)]: the source, its signal and
-    the fixture's channels live."""
+class Editor:
+    """The desk's settings as the channels page edits them: source,
+    address, start, curve and the channel map (0 = no channel)."""
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.names = {o['id']: o.get('name', o['id']) for o in cfg['objects']}
+        self.values = self._from(dmx.settings(cfg))
+        self.start = copy.deepcopy(self.values)
+        self.rows = [
+            ('source', ('source',), 'choice', dmx.SOURCES),
+            ('address', ('address',), 'int', (1, 512)),
+            ('master', ('master',), 'channel', None),
+            ('cct', ('cct',), 'channel', None),
+        ]
+        for oid, name in self.names.items():
+            for function in ('canvas', 'frame'):
+                self.rows.append(
+                    (f'{name} {function}', ('objects', oid, function), 'channel', None)
+                )
+        self.rows += [
+            ('start', ('start',), 'choice', STARTS),
+            ('dimmer curve', ('curve',), 'float', CURVE),
+        ]
+
+    @staticmethod
+    def _from(s):
+        ch = s['channels']
+        return {
+            'source': s['source'],
+            'address': s['address'],
+            'master': ch['master'] or 0,
+            'cct': ch['cct'] or 0,
+            'objects': {oid: dict(spec) for oid, spec in ch['objects'].items()},
+            'start': s['start'],
+            'curve': float(s['curve']),
+        }
+
+    def get(self, path, values=None):
+        node = self.values if values is None else values
+        for key in path[:-1]:
+            node = node[key]
+        return node.get(path[-1], 0) if path[0] == 'objects' else node[path[-1]]
+
+    def _set(self, values, path, value):
+        node = values
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+
+    @staticmethod
+    def channels(values):
+        """The channel map as config.yaml writes it (no zeros)."""
+        out = {k: values[k] for k in ('master', 'cct') if values[k]}
+        out['objects'] = {
+            oid: {f: n for f, n in spec.items() if n} for oid, spec in values['objects'].items()
+        }
+        out['objects'] = {oid: spec for oid, spec in out['objects'].items() if spec}
+        return out
+
+    def dmx(self, values=None):
+        """The cfg['dmx'] these values give (the other keys as they are)."""
+        v = self.values if values is None else values
+        out = dict(self.cfg.get('dmx') or {})
+        out.update({k: v[k] for k in ('source', 'address', 'start', 'curve')})
+        out['channels'] = self.channels(v)
+        return out
+
+    def change(self, index, steps):
+        """Step row `index` by `steps`; returns the new cfg['dmx'], or a
+        ValueError's text when the desk refuses it (nothing changes then)."""
+        _, path, kind, spec = self.rows[index]
+        value = self.get(path)
+        if kind == 'choice':
+            value = spec[(spec.index(value) + (1 if steps > 0 else -1)) % len(spec)]
+        elif kind == 'float':
+            step, lo, hi = spec
+            value = round(min(hi, max(lo, value + steps * step)), 2)
+        else:
+            lo, hi = spec if kind == 'int' else (0, 512)
+            value = min(hi, max(lo, int(value) + steps))
+        candidate = copy.deepcopy(self.values)
+        self._set(candidate, path, value)
+        new = self.dmx(candidate)
+        try:
+            dmx.settings({**self.cfg, 'dmx': new})
+        except ValueError as e:
+            return str(e)
+        self.values = candidate
+        return new
+
+    def changed(self):
+        """{dmx key: value} of what differs from the start (for saving)."""
+        out = {
+            k: self.values[k]
+            for k in ('source', 'address', 'start', 'curve')
+            if self.values[k] != self.start[k]
+        }
+        if self.channels(self.values) != self.channels(self.start):
+            out['channels'] = self.channels(self.values)
+        return out
+
+
+def channel_lines(desk, editor, selected=None):
+    """The channels page as [(text, colour)]: the source and its signal,
+    then the settings (the editor's rows, the one `selected` marked), a
+    channel with its DMX number and live value."""
     s = desk.settings
-    lines = []
-
-    lines.append(('DMX in (config.yaml dmx:)', TEXT))
+    lines = [('DMX in (config.yaml dmx:)', TEXT)]
     lines.append(('  ' + '   '.join(desk.status_lines()[:1]), DIM))
-    parts = [f'source {s["source"]}']
-    if s['source'] in ('sacn', 'artnet'):
-        parts.append(f'universe {s["universe"]}')
-    elif s['source'] == 'enttec':
-        parts.append(f'port {s["port"]}')
-    parts += [f'address {s["address"]}', f'start {s["start"]}', f'curve {s["curve"]:g}']
-    lines.append(('  ' + '  '.join(parts), DIM))
+    port = {'sacn': f'universe {s["universe"]}', 'artnet': f'universe {s["universe"]}'}
+    port['enttec'] = f'port {s["port"]}'
+    if s['source'] in port:
+        lines.append(('  ' + port[s['source']], DIM))
     lines.append(('', DIM))
-    lines.append(('  channel  offset  function                 value', TEXT))
     values = desk.faders()
-    for offset in desk.offsets:
-        label = ' '.join(p for p in desk.offset_labels[offset] if p)
-        hand = offset in desk.override
-        lines.append(
-            (
-                f'  {s["address"] + offset - 1:>7d}  {offset:>6d}  {label:<24s} '
-                f'{values[offset]:>5.0f}' + ('  by hand' if hand else ''),
-                HAND if hand else TEXT,
-            )
-        )
+    for i, (label, path, kind, _) in enumerate(editor.rows):
+        value = editor.get(path)
+        mark = '>' if i == selected else ' '
+        text = f'{mark} {label:<28s} '
+        colour = SELECTED if i == selected else TEXT
+        if kind == 'channel':
+            if value:
+                live = values.get(value)
+                hand = value in desk.override
+                text += f'{value:>3d}   DMX {s["address"] + value - 1:>3d}'
+                text += f'   {live:>3.0f}' if live is not None else ''
+                text += '  by hand' if hand else ''
+                if hand and i != selected:
+                    colour = HAND
+            else:
+                text += '  -   (none)'
+        elif kind == 'float':
+            text += f'{value:g}'
+        else:
+            text += f'{value}'
+        lines.append((text, colour))
     return lines
 
 
@@ -87,11 +203,15 @@ def run(
         pygame.display.set_caption(f'DMX — {ui.APP_NAME}')
     font = ui.help_font()
     desk = dmx.Desk(cfg)  # after the screen: from here on the finally below frees it
-    panel = faders.Faders(desk, pygame.font.SysFont('monospace', 16))
+    fader_font = pygame.font.SysFont('monospace', 16)
+    panel = faders.Faders(desk, fader_font)
     panel.select(0)
     pygame.key.set_repeat(*REPEAT)
+    editor = Editor(cfg)
 
     page = 0
+    selected = 0  # the setting on the channels page
+    message = ''
     show_help = True
     # the demo renders the scenes, once it is first shown
     demo = {'renderer': None, 'scenes': None, 'lights': None, 'idx': 0, 'surface': None}
@@ -146,13 +266,43 @@ def run(
             screen.fill((0, 0, 0))
             desk.frame()  # the filter runs on
             y = 30
-            for text, colour in channel_lines(desk):
+            for text, colour in channel_lines(desk, editor, selected):
                 screen.blit(font.render(text, True, colour), (30, y))
                 y += 28
             if show_help:
-                hint = 'Tab demo (faders)  H help  Q quit'
-                screen.blit(font.render(hint, True, DIM), (30, y + 20))
+                unsaved = '   * unsaved changes *' if editor.changed() else ''
+                hints = [
+                    'up/down setting  left/right change (Shift x10)  S save  T reset' + unsaved,
+                    'Tab demo (faders)  H help  Q quit',
+                ] + ([message] if message else [])
+                for k, hint in enumerate(hints):
+                    screen.blit(font.render(hint, True, DIM), (30, y + 20 + 28 * k))
         pygame.display.flip()
+
+    def rebuild(old, new_dmx):
+        """A desk (and faders) for the edited settings; the receiver goes on
+        unless the source changed, so a widget is not opened per key."""
+        same = new_dmx['source'] == old.settings['source']
+        cfg['dmx'] = new_dmx
+        new = dmx.Desk(cfg, receiver=old.receiver if same else None)
+        if not same:
+            old.close()
+        fresh = faders.Faders(new, fader_font)
+        fresh.select(0)
+        fresh.visible = panel.visible
+        return new, fresh
+
+    def save(editor):
+        """What changed into config.yaml's dmx section (the file as it is
+        on disk, nothing else of it changes); a message."""
+        changes = editor.changed()
+        if not changes:
+            return 'nothing changed'
+        on_disk = render.load_config(config)
+        on_disk['dmx'] = {**(on_disk.get('dmx') or {}), **changes}
+        calibration.save_config(on_disk, config)
+        editor.start = copy.deepcopy(editor.values)
+        return f'saved to {config}: {", ".join(changes)}'
 
     try:
         set_page(0)
@@ -165,12 +315,32 @@ def run(
                 pass
             elif event.type == pygame.KEYDOWN:
                 steps = 5 if event.mod & pygame.KMOD_SHIFT else 1
+                on_channels = PAGES[page] == 'channels'
                 if event.key in ui.QUIT_KEYS:
                     running = False
                 elif event.key == pygame.K_TAB:
                     set_page((page + 1) % len(PAGES))
                 elif event.key == pygame.K_h:
                     show_help = not show_help
+                elif on_channels and event.key in (pygame.K_UP, pygame.K_DOWN):
+                    step = -1 if event.key == pygame.K_UP else 1
+                    selected = (selected + step) % len(editor.rows)
+                elif on_channels and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    big = 10 if event.mod & pygame.KMOD_SHIFT else 1
+                    new = editor.change(selected, big if event.key == pygame.K_RIGHT else -big)
+                    if isinstance(new, str):
+                        message = new  # refused: the desk stays as it was
+                    else:
+                        message = ''
+                        desk, panel = rebuild(desk, new)
+                elif on_channels and event.key == pygame.K_s:
+                    message = save(editor)
+                elif on_channels and event.key == pygame.K_t:
+                    editor.values = copy.deepcopy(editor.start)
+                    desk, panel = rebuild(desk, editor.dmx())
+                    message = 'back to the values at the start'
+                elif on_channels:
+                    pass
                 elif event.key in look.SELECT_KEYS:
                     panel.select(look.SELECT_KEYS[event.key])
                 elif event.key in (pygame.K_UP, pygame.K_DOWN):
@@ -197,8 +367,12 @@ def self_test(config, scenes_path):
     cfg['dmx'] = {**(cfg.get('dmx') or {}), 'source': 'demo'}
     desk = dmx.Desk(cfg)
     time.sleep(0.2)
-    for text, _ in channel_lines(desk):
+    editor = Editor(cfg)
+    for text, _ in channel_lines(desk, editor, 0):
         print(text)
+    assert isinstance(editor.change(1, 1), dict) and editor.changed() == {
+        'address': editor.start['address'] + 1
+    }
     desk.close()
     print('self-test ok')
 
