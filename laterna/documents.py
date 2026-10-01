@@ -8,7 +8,7 @@ parsed config and scenes. Four documents:
   run_sheet     the operator's cue list (cue sheet, draaiboek): every scene
                 numbered as play.py's L label numbers it, drawn plainly,
                 how it is reached and what is on each object (A4 landscape)
-  scenes_sheet  the scenes' values from scenes.yaml in a table
+  scenes_sheet  the scenes' values from scenes.yaml in a table (A4 portrait)
   backup        every scene full screen, one page per picture at the
                 canvas's aspect ratio, in show order (blackouts as black
                 pages, one page per distinct combination of slideshow
@@ -1342,7 +1342,13 @@ def scenes_sheet(path, cfg, scenes, fades, data, source):
     empty for every scene is left out. No descriptions: the values only."""
     i18n.use(cfg.get('language'))
     show = show_name(cfg)
-    doc = Doc(path, tr('scenes.title'), tr('run.footer', source=source, date=today()), show=show)
+    doc = Doc(
+        path,
+        tr('scenes.title'),
+        tr('run.footer', source=source, date=today()),
+        pagesize=A4,
+        show=show,
+    )
     objects = cfg['objects']
     size, lead = 7, 8.6
 
