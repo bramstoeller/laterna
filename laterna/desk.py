@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""DMX: the light desk, step 7.
+"""DMX: the light desk, step 8.
 
 Two pages, Tab switches:
 
@@ -49,28 +49,51 @@ CURVE = (0.1, 0.5, 4.0)  # step, lowest, highest
 
 class Editor:
     """The desk's settings as the channels page edits them: source,
-    address, start, curve and the channel map (0 = no channel)."""
+    address, start, curve and the channel map (0 = no channel). The
+    channel rows come in the order of their channels, as the faders on the
+    desk; the ones without a channel last."""
 
     def __init__(self, cfg):
         self.cfg = cfg
         self.names = {o['id']: o.get('name', o['id']) for o in cfg['objects']}
         self.values = self._from(dmx.settings(cfg))
         self.start = copy.deepcopy(self.values)
-        self.rows = [
+        self.head = [
             ('source', ('source',), 'choice', dmx.SOURCES),
             ('address', ('address',), 'int', (1, 512)),
+        ]
+        self.channel_rows = [
             ('master', ('master',), 'channel', None),
             ('cct', ('cct',), 'channel', None),
         ]
         for oid, name in self.names.items():
             for function in ('canvas', 'frame'):
-                self.rows.append(
+                self.channel_rows.append(
                     (f'{name} {function}', ('objects', oid, function), 'channel', None)
                 )
-        self.rows += [
+        self.tail = [
             ('start', ('start',), 'choice', STARTS),
             ('dimmer curve', ('curve',), 'float', CURVE),
         ]
+
+    @property
+    def rows(self):
+        """The rows as the page shows them: source and address, the channels
+        in channel order (none last; equal ones as config.yaml lists them),
+        then start and the curve."""
+        order = sorted(
+            range(len(self.channel_rows)),
+            key=lambda i: (
+                self.get(self.channel_rows[i][1]) == 0,
+                self.get(self.channel_rows[i][1]),
+                i,
+            ),
+        )
+        return self.head + [self.channel_rows[i] for i in order] + self.tail
+
+    def index(self, path):
+        """Where the row of `path` stands now."""
+        return next(i for i, row in enumerate(self.rows) if row[1] == path)
 
     @staticmethod
     def _from(s):
@@ -327,7 +350,9 @@ def run(
                     selected = (selected + step) % len(editor.rows)
                 elif on_channels and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
                     big = 10 if event.mod & pygame.KMOD_SHIFT else 1
+                    path = editor.rows[selected][1]
                     new = editor.change(selected, big if event.key == pygame.K_RIGHT else -big)
+                    selected = editor.index(path)  # a channel row moves with its number
                     if isinstance(new, str):
                         message = new  # refused: the desk stays as it was
                     else:
@@ -336,7 +361,9 @@ def run(
                 elif on_channels and event.key == pygame.K_s:
                     message = save(editor)
                 elif on_channels and event.key == pygame.K_t:
+                    path = editor.rows[selected][1]
                     editor.values = copy.deepcopy(editor.start)
+                    selected = editor.index(path)
                     desk, panel = rebuild(desk, editor.dmx())
                     message = 'back to the values at the start'
                 elif on_channels:
