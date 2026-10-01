@@ -2,7 +2,8 @@
 """Export: four PDFs and two slide decks of the loaded config.yaml and scenes.yaml,
 written to _export/ next to config.yaml (laterna/documents.py lays the PDFs
 out), named in the export's language (FILES; nl: draaiboek.pdf, configuratie.pdf),
-the backup after the show's folder (shows/my-show: my-show.pdf, .ppsx, .pptx):
+the backup after the show's folder (shows/my-show: my-show.pdf, my-show.pptx,
+my-show-unlit.pptx; nl my-show-onbelicht.pptx):
 
   config.pdf     calibration, the frame shapes with their inner corners,
                  molding, light and look, the pretend spot (white canvases
@@ -19,16 +20,16 @@ the backup after the show's folder (shows/my-show: my-show.pdf, .ppsx, .pptx):
                  distinct combination of its pictures, a video as its
                  first frame; with the keystone warp of config.yaml, like
                  the presentation (the others show the plane)
-  <show>.ppsx    the scenes as slides of objects (laterna/layers.py), lit
-                 as in the show: the pictures whole with PowerPoint's crop,
-                 text as text, one mask with the frames; played like the
-                 show: fades, slideshow pictures and text lines at their
-                 time, holds moving on by themselves, the rest on a click
-                 or key, the descriptions in the speaker notes
-                 (laterna/slides.py; on the plane, without the keystone).
-                 Opens as the slide show, marked as final
-  <show>.pptx    the same to work on: the picture files as they are, whole
-                 and uncropped behind the mask, text and colours unlit
+  <show>.pptx    the scenes as slides of objects (laterna/layers.py), lit
+                 as in the show: the pictures whole (uncropped, the part
+                 shown in the frame, the rest under the mask), text as
+                 text, one mask with the frames; played like the show:
+                 fades, slideshow pictures and text lines at their time,
+                 holds moving on by themselves, the rest on a click or key,
+                 the descriptions in the speaker notes (laterna/slides.py;
+                 on the plane, without the keystone)
+  <show>-unlit.pptx  the same with the picture files as they are (as in
+                 images/), text and colours unlit: to work on
   scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
                  blackout, colours and what each object shows (no
                  descriptions: the values only)
@@ -63,6 +64,7 @@ FILES = {
     'en': ('cue-sheet.pdf', 'config.pdf', 'scenes.pdf'),
     'nl': ('draaiboek.pdf', 'configuratie.pdf', 'scenes.pdf'),
 }
+UNLIT = {'en': 'unlit', 'nl': 'onbelicht'}  # <show>-unlit.pptx: the pictures as they are
 OLD_FILES = {'run-sheet.pdf', 'backup.pdf', 'backup.pptx'}  # earlier names, removed
 MAX_COMBINATIONS = 64  # slideshow pictures per scene in the export
 THUMB_WIDTH = 480  # px of the cue list pictures
@@ -424,7 +426,7 @@ def export_all(
     for scene, objs in zip(scenes, editable):
         for name, oid in raw.overlaps(objs):
             progress(
-                f'warning: in the pptx {name} ({scene.get("name", "?")}) reaches into frame {oid}'
+                f'warning: in the unlit pptx {name} ({scene.get("name", "?")}) reaches into frame {oid}'
             )
     progress('pictures for the config pages...')
     extras = config_renders(cfg, renderer, scenes, views, gain)
@@ -434,15 +436,19 @@ def export_all(
     for old in {n for files in FILES.values() for n in files} | OLD_FILES:
         if old not in names and (out / old).exists():
             (out / old).unlink()  # the same document under another name
-    pdf, ppsx, pptx = (out / f'{backup}.{ext}' for ext in ('pdf', 'ppsx', 'pptx'))
+    pdf, pptx = out / f'{backup}.pdf', out / f'{backup}.pptx'
+    unlit = out / f'{backup}-{UNLIT[cfg.get("language") or "en"]}.pptx'
+    for old in [out / f'{backup}.ppsx'] + [out / f'{backup}-{u}.pptx' for u in UNLIT.values()]:
+        if old != unlit and old.exists():
+            old.unlink()  # an earlier name
     paths = [out / name for name in names]
     progress(f'writing {pdf.name}...')
     documents.backup(pdf, cfg, scenes, views)
     name = documents.show_name(cfg)
-    progress(f'writing {ppsx.name}...')
-    slides.write(ppsx, cfg, scenes, fades, objects, f'{name} · backup', final=True)
     progress(f'writing {pptx.name}...')
-    slides.write(pptx, cfg, scenes, fades, editable, f'{name} · to edit')
+    slides.write(pptx, cfg, scenes, fades, objects, f'{name} · backup')
+    progress(f'writing {unlit.name}...')
+    slides.write(unlit, cfg, scenes, fades, editable, f'{name} · unlit')
     progress(f'writing {paths[0].name}...')
     documents.run_sheet(
         paths[0],
@@ -460,7 +466,7 @@ def export_all(
     )
     progress(f'writing {paths[2].name}...')
     documents.scenes_sheet(paths[2], cfg, scenes, fades, data, source)
-    return [pdf, ppsx, pptx] + paths
+    return [pdf, pptx, unlit] + paths
 
 
 def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersample=3):

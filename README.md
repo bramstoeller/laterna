@@ -69,12 +69,11 @@ In show order, each saving what it sets to `config.yaml`:
    every frame shows
 7. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF,
    and the backup as slides: a slide per scene of separate objects (the
-   pictures whole with PowerPoint's crop, text as text in its font, one
-   mask with the frames), with the fades, holds, slideshow pictures and
-   text lines at their time, the descriptions in the speaker notes;
-   `<show>.ppsx` lit as in the show (opens as the slide show, marked as
-   final), `<show>.pptx` to work on (the picture files as they are, whole
-   and uncropped behind the mask, text and colours unlit); install the show's font where the slides are shown
+   pictures whole, uncropped, under one mask with the frames; text as text
+   in its font), with the fades, holds, slideshow pictures and text lines
+   at their time, the descriptions in the speaker notes; `<show>.pptx`
+   lit as in the show, `<show>-unlit.pptx` (nl `-onbelicht`) with the
+   picture files as they are and text and colours unlit; install the show's font where the slides are shown
 8. **DMX**: the desk's source, address and channels, live, and a demo with
    faders on screen
 9. **Present**: play the scenes from `scenes.yaml`

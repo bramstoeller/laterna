@@ -3,10 +3,10 @@ composes into one picture, in layers one can move, swap or animate, lit as
 the lamps light them with the desk at full (export.full_light), on the
 plane (no keystone). Back to front:
 
-  photo  a picture (or a video's first frame) whole, at its own size, lit
-         where it lands on the canvas; the slide shows the part the frame
-         shows through PowerPoint's own crop (and flip), so it can be
-         re-cropped or swapped there. What the mapping's crop takes beyond
+  photo  a picture (or a video's first frame) whole, uncropped, lit where
+         it lands on the canvas, placed (and flipped) so that the part the
+         frame shows fills it; the rest lies under the mask, so it can be
+         moved, scaled or swapped. What the mapping's crop takes beyond
          the picture is in the file mirrored, as the show mirrors it
   plate  a flat colour over a frame's opening, lit there: the fill of a
          frame that shows nothing, a text's background
@@ -19,10 +19,9 @@ plane (no keystone). Back to front:
 A blackout has no objects. Every object can come in later (`fade`): a
 slideshow's pictures and a text's steps at their time.
 
-`raw` (the pptx to work on): the pictures are the files as they are,
-whole and uncropped, placed so that the part the frame shows fills it
-(the rest is under the mask; beyond the picture the frame stays empty),
-the flat colours and the text in their own colours: no light, no spot.
+`raw` (the unlit pptx): the pictures are the files as they are (beyond
+the picture the frame stays empty), the flat colours and the text in
+their own colours: no light, no spot.
 The mask stays as lit. overlaps() names the pictures that reach into
 another frame's opening (whatever comes later covers it there).
 """
@@ -128,8 +127,7 @@ class Layers:
 
     def photo(self, mapping, source, data=None):
         """A picture as `mapping` shows it: {'kind': 'pic', 'data' (JPEG),
-        'box' (x, y, w, h canvas px), 'crop' (l, t, r, b: the fractions of
-        the file PowerPoint crops away), 'flip'}. `source`: the RGB float
+        'box' (x, y, w, h canvas px of the whole file), 'flip'}. `source`: the RGB float
         picture as read (render._load_image), uncropped; data: the file's
         bytes (raw: embedded as they are; None: a JPEG of `source`)."""
         h, w = source.shape[:2]
@@ -161,27 +159,14 @@ class Layers:
             s = max(bw / cw, bh / ch)
             nw, nh = max(bw, round(cw * s)), max(bh, round(ch * s))
             sx, sy, ox, oy = nw / cw, nh / ch, (nw - bw) // 2, (nh - bh) // 2
-        # the part shown, in the cropped picture's px, then in the file's
-        u0, u1 = ox / sx, (ox + bw) / sx
-        v0, v1 = oy / sy, (oy + bh) / sy
-        if flip:
-            u0, u1 = cw - u1, cw - u0
-        crop_out = (
-            (cx0 + u0) / pw,
-            (cy0 + v0) / ph,
-            1 - (cx0 + u1) / pw,
-            1 - (cy0 + v1) / ph,
-        )
-        box = (x0 / self.ss, y0 / self.ss, bw / self.ss, bh / self.ss)
-        if self.raw:  # the whole file, placed so that the part shown fills the frame
+        # the whole file, placed so that the part shown fills the frame
+        left = x0 - ox + ((cw - (pw - cx0)) if flip else -cx0) * sx
+        top = y0 - oy - cy0 * sy
+        box = (left / self.ss, top / self.ss, pw * sx / self.ss, ph * sy / self.ss)
+        if self.raw:
             data = data or _jpeg(np.clip(source + 0.5, 0, 255).astype(np.uint8))
             ext = 'png' if data[:4] == b'\x89PNG' else 'jpg'
-            left = x0 - ox + ((cw - (pw - cx0)) if flip else -cx0) * sx
-            top = y0 - oy - cy0 * sy
-            whole = (left / self.ss, top / self.ss, pw * sx / self.ss, ph * sy / self.ss)
-            return {
-                'kind': 'pic', 'data': data, 'ext': ext, 'box': whole, 'crop': None, 'flip': flip
-            }  # fmt: skip
+            return {'kind': 'pic', 'data': data, 'ext': ext, 'box': box, 'flip': flip}
         # every pixel of the file lit where it lands on the canvas
         us = np.arange(pw, dtype=np.float64) + 0.5 - cx0
         vs = np.arange(ph, dtype=np.float64) + 0.5 - cy0
@@ -190,14 +175,7 @@ class Layers:
         gx, gy = np.meshgrid(xs, ys)
         gain = self._gain(mapping['objects'], gx.ravel(), gy.ravel(), mapping.get('spot', True))
         lit = self._lit(source * gain.reshape(ph, pw, 3))
-        return {
-            'kind': 'pic',
-            'data': _jpeg(lit),
-            'ext': 'jpg',
-            'box': box,
-            'crop': crop_out,
-            'flip': flip,
-        }
+        return {'kind': 'pic', 'data': _jpeg(lit), 'ext': 'jpg', 'box': box, 'flip': flip}
 
     def overlaps(self, objects):
         """[(picture name, object id)]: the pictures among a scene's objects
@@ -232,7 +210,6 @@ class Layers:
             'data': _png(self._lit(colour)),
             'ext': 'png',
             'box': (x0, y0, x1 - x0, y1 - y0),
-            'crop': None,
             'flip': False,
         }
 
@@ -278,7 +255,6 @@ class Layers:
             'data': self.masks[key],
             'ext': 'png',
             'box': (0, 0, w, h),
-            'crop': None,
             'flip': False,
         }
 

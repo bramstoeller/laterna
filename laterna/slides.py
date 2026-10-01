@@ -3,7 +3,7 @@ python-pptx (lxml is a native dependency), just the parts PowerPoint and
 Impress need.
 
 One slide per scene, made of objects (laterna/layers.py): the pictures
-whole with PowerPoint's own crop, the text as text boxes in its font,
+whole and uncropped, the text as text boxes in its font,
 flat colours, and over it all one mask with the frames and black. Played
 like play.py plays it: each scene fades in over its fade and moves on by
 itself when it has a hold (the others wait for a click or key);
@@ -121,14 +121,10 @@ def _xfrm(box, flip=False):
 
 
 def _pic(sid, obj, rid):
-    crop = ''
-    if obj['crop'] is not None:
-        left, top, right, bottom = (round(v * 100000) for v in obj['crop'])
-        crop = f'<a:srcRect l="{left}" t="{top}" r="{right}" b="{bottom}"/>'
     return (
         f'<p:pic><p:nvPicPr><p:cNvPr id="{sid}" name={quoteattr(obj["name"])}/>'
         '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
-        f'<p:blipFill><a:blip r:embed="{rid}"/>{crop}<a:stretch><a:fillRect/></a:stretch>'
+        f'<p:blipFill><a:blip r:embed="{rid}"/><a:stretch><a:fillRect/></a:stretch>'
         f'</p:blipFill><p:spPr>{_xfrm(obj["box"], obj["flip"])}'
         '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>'
     )
@@ -297,18 +293,9 @@ TITLE_STYLES = (
 )
 
 
-CUSTOM = (
-    f'{HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/'
-    'custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/'
-    'docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" '
-    'name="_MarkAsFinal"><vt:bool>true</vt:bool></property></Properties>'
-)
-
-
-def write(path, cfg, scenes, fades, objects, title, final=False):
-    """Write the backup slides: a slide per scene, of its objects
-    (layers.Layers.scene, one list per scene). final: a .ppsx that opens
-    as the slide show, marked as final (PowerPoint opens it read-only)."""
+def write(path, cfg, scenes, fades, objects, title):
+    """Write a pptx: a slide per scene, of its objects (layers.Layers.scene,
+    one list per scene)."""
     w, h = cfg['canvas']
     cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
     lang = {'nl': 'nl-NL'}.get(cfg.get('language') or 'en', 'en-GB')
@@ -322,7 +309,7 @@ def write(path, cfg, scenes, fades, objects, title, final=False):
 
     parts = {}
     types = [
-        ('slideshow.main+xml' if final else 'presentation.main+xml', '/ppt/presentation.xml'),
+        ('presentation.main+xml', '/ppt/presentation.xml'),
         ('slideMaster+xml', '/ppt/slideMasters/slideMaster1.xml'),
         ('slideLayout+xml', '/ppt/slideLayouts/slideLayout1.xml'),
         ('notesMaster+xml', '/ppt/notesMasters/notesMaster1.xml'),
@@ -333,21 +320,13 @@ def write(path, cfg, scenes, fades, objects, title, final=False):
         f'<Relationship Id="rId1" Type="{REL}officeDocument" Target="ppt/presentation.xml"/>'
         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/'
         'relationships/metadata/core-properties" Target="docProps/core.xml"/>'
-        + (
-            f'<Relationship Id="rId3" Type="{REL}custom-properties" Target="docProps/custom.xml"/>'
-            if final
-            else ''
-        )
-        + '</Relationships>'
+        '</Relationships>'
     )
-    if final:
-        parts['docProps/custom.xml'] = CUSTOM
     parts['docProps/core.xml'] = (
         f'{HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/'
         'metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">'
         f'<dc:title>{escape(title)}</dc:title><dc:creator>laterna projection export</dc:creator>'
-        + ('<cp:contentStatus>Final</cp:contentStatus>' if final else '')
-        + '</cp:coreProperties>'
+        '</cp:coreProperties>'
     )
     parts['ppt/presentation.xml'] = (
         f'{HEAD}<p:presentation {XMLNS}>'
@@ -442,12 +421,6 @@ def write(path, cfg, scenes, fades, objects, title, final=False):
         + (
             '<Override PartName="/docProps/core.xml" '
             'ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
-        )
-        + (
-            '<Override PartName="/docProps/custom.xml" ContentType="application/'
-            'vnd.openxmlformats-officedocument.custom-properties+xml"/>'
-            if final
-            else ''
         )
     )
     content_types = (
