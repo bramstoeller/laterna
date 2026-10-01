@@ -228,6 +228,7 @@ def plain_view(cfg, scene, slides=None):
             path = m.get('image') or m.get('video')
         source = _source(cfg, path)
         if source is not None:
+            source = render.crop_medium(source, m)
             polys = render.round_canvas_px(cfg, m['objects'])
             rect = render.canvas_rect_px(cfg, m.get('fit', m['objects']))
             render.draw_source(image, source, m, polys, rect, cfg)

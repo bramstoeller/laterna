@@ -228,6 +228,10 @@ class Mapping(Timing):
     width: Positive | None = None
     height: Positive | None = None
     spot: bool | None = None  # false: no look.spot on this medium (lit evenly)
+    # the part of the picture that fills the frame: [x0, y0, x1, y1] as fractions
+    # of its width and height (beyond 0..1 mirrored); flip mirrors it left-right
+    crop: Annotated[list[float], Field(min_length=4, max_length=4)] | None = None
+    flip: bool | None = None
     loop: bool | None = None  # slideshow: false = stay on the last picture (default true)
     # text instead of a picture (laterna/text.py)
     text: Annotated[list[str | list[str] | TextLine], Field(min_length=1)] | None = None
@@ -261,6 +265,12 @@ class Mapping(Timing):
             or self.height
         ):
             raise ValueError('text goes in one frame: one object, no fit, width or height')
+        if (self.crop is not None or self.flip) and self.image is None and self.slideshow is None:
+            raise ValueError('crop and flip: only with an image or a slideshow')
+        if self.crop is not None and not (
+            self.crop[0] < self.crop[2] and self.crop[1] < self.crop[3]
+        ):
+            raise ValueError('crop: [x0, y0, x1, y1] with x0 < x1 and y0 < y1')
         if self.text is None:
             used = [k for k in TEXT_ONLY if getattr(self, k) is not None]
             if used:

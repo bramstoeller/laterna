@@ -812,6 +812,29 @@ def _load_image(path):
     return _IMAGE_CACHE[key]
 
 
+def crop_medium(img, mapping):
+    """A picture as a mapping shows it: its `crop` [x0, y0, x1, y1] (fractions
+    of the width and height; what lies beyond the picture mirrored without
+    the edge pixel, never black), then `flip` (left-right). Unchanged
+    without either."""
+    crop, flip = mapping.get('crop'), mapping.get('flip')
+    if crop is not None:
+        h, w = img.shape[:2]
+        x0, x1 = (round(float(v) * w) for v in (crop[0], crop[2]))
+        y0, y1 = (round(float(v) * h) for v in (crop[1], crop[3]))
+        x1, y1 = max(x1, x0 + 1), max(y1, y0 + 1)
+        pad = [max(0, -y0), max(0, y1 - h), max(0, -x0), max(0, x1 - w)]
+        if any(pad):
+            # the mirror reaches at most one picture beyond each edge
+            pad = [min(v, (h if k < 2 else w) - 1) for k, v in enumerate(pad)]
+            img = cv2.copyMakeBorder(img, *pad, cv2.BORDER_REFLECT_101)
+            x0, x1, y0, y1 = x0 + pad[2], x1 + pad[2], y0 + pad[0], y1 + pad[0]
+        img = img[max(0, y0) : y1, max(0, x0) : x1]
+    if flip:
+        img = img[:, ::-1]
+    return np.ascontiguousarray(img)
+
+
 def _resize(img, bw, bh):
     interp = cv2.INTER_AREA if bw < img.shape[1] else cv2.INTER_CUBIC
     return cv2.resize(img, (bw, bh), interpolation=interp)
@@ -963,7 +986,7 @@ def _draw_mapping(canvas, mapping, polys_px, ref_rect, cfg, ss=1):
     the polygons themselves. A missing image is skipped with a warning so
     the show still runs; those polygons stay black."""
     try:
-        source = _load_image(cfg['_dir'] / mapping['image'])
+        source = crop_medium(_load_image(cfg['_dir'] / mapping['image']), mapping)
     except FileNotFoundError:
         print(f'warning: {mapping["image"]} missing, objects {mapping["objects"]} stay black')
         return

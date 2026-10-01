@@ -191,7 +191,9 @@ class SlideshowClip:
 
 def _slideshow_key(mapping):
     """Pool key of a slideshow: same images and timing = same timeline."""
-    return 'slideshow:{}:{}:{}:{}:{}'.format(
+    return 'slideshow:{}:{}:{}:{}:{}:{}:{}'.format(
+        mapping.get('crop'),
+        bool(mapping.get('flip')),
         mapping.get('loop', True),
         mapping.get('hold', render.SLIDESHOW_DEFAULTS['hold']),
         mapping.get('transition', render.SLIDESHOW_DEFAULTS['transition']),
@@ -221,7 +223,10 @@ def _probe_size(cfg, mapping):
         cap.release()
         return (w, h) if w > 0 and h > 0 else (1280, 720)
     img = _load_slide(path)
-    return (img.shape[1], img.shape[0]) if img is not None else (1280, 720)
+    if img is None:
+        return (1280, 720)
+    img = render.crop_medium(img, mapping)
+    return (img.shape[1], img.shape[0])
 
 
 def _region_rows(region, spec):
@@ -294,7 +299,7 @@ def _composite_slides(cfg, mapping, spec, lut):
             )
             continue
         img = _load_slide(path)
-        region = black if img is None else fit(img, bw, bh)
+        region = black if img is None else fit(render.crop_medium(img, mapping), bw, bh)
         slides.append(_compose_rows(region, spec, lut))
     return slides
 

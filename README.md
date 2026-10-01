@@ -77,6 +77,22 @@ Q / Esc goes back: from an app to the show's menu, from there to the
 show list, from there it quits. Each app also runs on its own inside a
 show folder, e.g. `python -m laterna.play --test` for a headless self-test.
 
+## Cropping
+
+A picture is shown whole, cover-fitted to its frame. To show a part of
+it, give the part that fills the frame as fractions of the picture's
+width and height; what lies beyond the picture is mirrored (never black),
+and `flip: true` mirrors it left-right:
+
+```yaml
+- image: images/sisyphus.jpg
+  crop: [0.12, -0.01, 0.43, 0.97]   # x0, y0, x1, y1
+  flip: true
+```
+
+The original picture can stay as it is; on a slideshow the crop goes for
+all its pictures.
+
 ## Text
 
 A mapping can show text instead of a picture: the lines, a font file in
