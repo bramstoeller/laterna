@@ -7,6 +7,8 @@ venv/
 .ruff_cache/
 **/_archive/morph/venv/
 __pycache__/
+# the version a build bakes in (laterna/version.py)
+laterna/_build.py
 *.pyc
 _cache/
 _renders/

@@ -47,6 +47,7 @@ from . import (
     test_pattern,
     ui,
 )
+from .version import version
 
 # folders never searched for shows, besides the ones starting with . or _
 # (hidden, and what the apps make: _cache, _renders, _export; the frozen
@@ -216,7 +217,8 @@ def main():
     # scaled to fill the screen (ui.set_canvas); back in the picker the
     # show's canvas stays: a new mode in fullscreen closes and reopens the
     # window, so the display only changes for a show with another canvas
-    screen = ui.init_screen(None, ui.APP_NAME)
+    title = f'{ui.APP_NAME} {version()}'
+    screen = ui.init_screen(None, title)
 
     def open_show(index):
         nonlocal screen
@@ -233,12 +235,12 @@ def main():
             app_menu(screen, folder)
         finally:
             os.chdir(root)
-        pygame.display.set_caption(ui.APP_NAME)
+        pygame.display.set_caption(title)
         return ''
 
     if not shows:
         subtitle = f'no config.yaml found in the folders below {root}'
     else:
         subtitle = 'choose a show'
-    menu(screen, ui.APP_NAME, subtitle, [f.name for f in shows], open_show, quit_hint='Q quits')
+    menu(screen, title, subtitle, [f.name for f in shows], open_show, quit_hint='Q quits')
     pygame.quit()

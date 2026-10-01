@@ -32,6 +32,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags, for git describe
 
       - uses: actions/setup-python@v7
         with:
@@ -40,6 +42,10 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt pyinstaller
+
+      # the version the app shows (laterna/version.py)
+      - name: Bake in the version
+        run: echo "VERSION = '$(git describe --tags --always --dirty)'" > laterna/_build.py
 
       # these sources are bundled as data: laterna/play.py hashes render.py,
       # video.py, frame.py and text.py into the render cache fingerprint. reportlab loads its font metrics modules by
