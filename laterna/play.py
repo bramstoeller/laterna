@@ -58,6 +58,13 @@ fade-in finished; a key press still works earlier. Without a hold the
 scene waits for a key. Its `transition_time` (or the global one) is the
 fade to the next scene.
 
+With a light desk's `scene` channel (laterna/dmx.py) the desk picks the
+scene: when its value changes to 1..the number of scenes the show fades
+from where it is to that scene, with the current scene's
+transition_time; a change during that fade only changes where it goes
+(a blackout crossfades to black). 0, a scene past the last or the scene
+the show is on do nothing; nor does the value the desk starts with.
+
 With a light desk the master also steps in and out of blackout scenes.
 A scene waiting for a key, followed by a blackout scene, goes into it
 when the desk's master goes to 0 after the scene has been lit; a
@@ -756,6 +763,66 @@ def run(
             last_trigger = ('> 0', idx, idx + 1, now())
             go_to(idx + 1, instant=True)
 
+    scene_seen = desk.scene()  # the scene channel at the start: only a change counts
+    scene_live = desk.receiving  # the desk's first frame is a start, not a change
+
+    def scene_request():
+        """The scene the desk's scene channel asks for (an index), once, when
+        it changed to one the show is not on; None otherwise (0 or past the
+        last scene ask nothing)."""
+        nonlocal scene_seen, scene_live
+        value = desk.scene()
+        if desk.receiving and not scene_live:
+            scene_live, scene_seen = True, value
+            return None
+        if value is None or value == scene_seen:
+            return None
+        scene_seen = value
+        return value - 1 if 1 <= value <= total and value - 1 != idx else None
+
+    def jump(target):
+        """Fade from the current scene to `target` for the scene channel,
+        with the current scene's transition_time; a change of the channel
+        during the fade only changes where it goes. A blackout on either
+        side crossfades to black."""
+        nonlocal idx, transition_until, transition_span, transition_to, scene_seen
+        if not wait_for(target):
+            return
+        fade = fades[idx] if idx < len(fades) else float(scenes[idx]['transition_time'])
+        to = wanted = target
+        start = now()
+        transition_until, transition_span, transition_to = start + fade, fade, to
+        while fade > 0:
+            t = (now() - start) / fade
+            if t >= 1.0 or pump():  # pump: True = a double press cuts the fade short
+                break
+            value = desk.scene()
+            if value is not None and value != scene_seen:
+                scene_seen = value
+                if 1 <= value <= total:
+                    wanted = value - 1
+            if wanted != to and frame_for(wanted) is not None:  # rendered: it can be shown
+                to = transition_to = wanted
+            lights.light(
+                screen,
+                frame_for(idx),
+                molding_for(idx),
+                desk.levels(),
+                fade=(frame_for(to), molding_for(to), t, lamps.spot_free(scenes[to])),
+                no_spot=lamps.spot_free(scenes[idx]),
+            )
+            overlay()
+            pygame.display.flip()
+            clock.tick(60)
+        pygame.event.clear(pygame.KEYDOWN)
+        old, idx = idx, to
+        if old != idx and old in players:
+            keep = players[idx].paths() if idx in players else set()
+            players[old].stop(keep)  # clips the new scene also maps run on
+        transition_until = None
+        arm_hold()
+        show(idx)
+
     def arm_hold():
         """Start the current scene's hold, if it has one and a next scene."""
         nonlocal hold_until
@@ -954,6 +1021,9 @@ def run(
         if running:
             check_hold()
             check_master()
+            request = scene_request()
+            if request is not None:
+                jump(request)
             if hold_until is not None and now() - last_shown >= BAR_TICK_MS / 1000.0:
                 show(idx)  # the state bar shrinks with the hold
 

@@ -5,7 +5,7 @@ Two pages, Tab switches:
 
   channels the desk as config.yaml `dmx:` has it, to set up: the source
            and its signal, then the settings, each with its value live
-           where it is a channel: source, address, master, cct, per frame
+           where it is a channel: source, address, master, cct, scene, per frame
            its canvas and frame channel (0 = none), start and the dimmer
            curve. up / down picks one, left / right changes it (Shift: x10),
            at once (the desk follows; an address that runs past 512 is
@@ -65,6 +65,7 @@ class Editor:
         self.channel_rows = [
             ('master', ('master',), 'channel', None),
             ('cct', ('cct',), 'channel', None),
+            ('scene (1 = the first)', ('scene',), 'channel', None),
         ]
         for oid, name in self.names.items():
             for function in ('canvas', 'frame'):
@@ -103,6 +104,7 @@ class Editor:
             'address': s['address'],
             'master': ch['master'] or 0,
             'cct': ch['cct'] or 0,
+            'scene': ch['scene'] or 0,
             'objects': {oid: dict(spec) for oid, spec in ch['objects'].items()},
             'start': s['start'],
             'curve': float(s['curve']),
@@ -123,7 +125,7 @@ class Editor:
     @staticmethod
     def channels(values):
         """The channel map as config.yaml writes it (no zeros)."""
-        out = {k: values[k] for k in ('master', 'cct') if values[k]}
+        out = {k: values[k] for k in ('master', 'cct', 'scene') if values[k]}
         out['objects'] = {
             oid: {f: n for f, n in spec.items() if n} for oid, spec in values['objects'].items()
         }

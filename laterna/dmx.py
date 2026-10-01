@@ -11,6 +11,12 @@ The desk sees the projection as one fixture at `address` (config.yaml
                 linear in mired. The projector's white is 6500 K: above
                 that the light goes bluish, below it warm. Dimming reddens
                 from there like a tungsten filament (laterna/lamps.py)
+  scene         optional: the scene to go to, 1 = the first (0 = none). Only
+                a change counts, as the desk sends it (no smoothing): the
+                show fades from the scene it is on to that one, with the
+                current scene's transition_time; a change during that fade
+                only changes where it goes (laterna/play.py). On that scene
+                already, or 0, or past the last: nothing happens
   per object (by id or name):
     canvas      the lamp on its picture (image, video or fill colour)
     frame       the lamp on its molding (`molding` is accepted too)
@@ -88,7 +94,7 @@ DEFAULTS = {
     'curve': 2.2,  # the dimmer curve, pixel ~ fader ^ (1 / curve): 2.2 = linear in light
 }
 SOURCES = ('off', 'sacn', 'artnet', 'enttec', 'demo')
-GLOBAL_CHANNELS = ('master', 'cct')
+GLOBAL_CHANNELS = ('master', 'cct', 'scene')
 OBJECT_CHANNELS = ('canvas', 'frame', 'power')
 ALIASES = {'molding': 'frame'}
 SACN_PORT = 5568
@@ -98,7 +104,7 @@ ACN_ID = b'ASC-E1.17\x00\x00\x00'
 
 def default_channels(cfg):
     """master, cct, then canvas and frame per object."""
-    channels = {'master': 1, 'cct': 2, 'objects': {}}
+    channels = {'master': 1, 'cct': 2, 'scene': None, 'objects': {}}
     for k, o in enumerate(cfg['objects']):
         channels['objects'][o['id']] = {'canvas': 3 + 2 * k, 'frame': 4 + 2 * k}
     return channels
@@ -701,7 +707,12 @@ class Desk:
         self.offsets = sorted({off for off, _ in self.labels})
         self.offset_labels = offset_labels(cfg, self.channels)
         self.initial = {
-            off: 128.0 if off == self.channels['cct'] else 255.0 for off in self.offsets
+            off: 128.0
+            if off == self.channels['cct']
+            else 0.0
+            if off == self.channels['scene']
+            else 255.0
+            for off in self.offsets
         }
         self.smooth = (
             Smooth(self.settings['smooth'], self.initial) if self.settings['smooth'] else None
@@ -782,6 +793,12 @@ class Desk:
         value = self._value(data, offset)
         return 1.0 if value is None else value / 255.0
 
+    def scene(self):
+        """The scene channel as it stands, unsmoothed (by hand where the
+        faders took it over), as a whole number; None without that channel."""
+        offset = self.channels['scene']
+        return None if not offset else int(round(self.faders()[offset]))
+
     def master(self):
         """The master now, 0..1 (filtered like the lamps follow it; 1 with no
         master channel)."""
@@ -833,6 +850,8 @@ class Desk:
                 self._value(data, self.channels['cct']), self.settings['cct'], self.kelvin
             )
             parts.append(f'cct {kelvin:.0f} K')
+        if self.channels['scene']:
+            parts.append(f'scene {self.scene()}')
         for oid, spec in self.channels['objects'].items():
             values = '/'.join(
                 f'{self._value(data, spec[n]):.0f}' for n in OBJECT_CHANNELS if n in spec

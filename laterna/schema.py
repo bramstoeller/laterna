@@ -126,6 +126,7 @@ class ObjectChannels(Node):
 class Channels(Node):
     master: Channel | None = None
     cct: Channel | None = None
+    scene: Channel | None = None  # the scene to go to, 1 = the first (0 = none)
     objects: dict[int | str, ObjectChannels] | None = None  # by object id or name
 
 
