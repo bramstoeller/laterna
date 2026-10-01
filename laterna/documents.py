@@ -1300,8 +1300,13 @@ def _mapping_lines(m):
         return str(path).replace('\\', '/').split('/')[-1]
 
     if 'text' in m:
-        first = next((t if isinstance(t, str) else t['text'] for t in m['text']), '')
-        n = sum(1 for t in m['text'] if (t if isinstance(t, str) else t['text']).strip())
+
+        def whole(t):  # a line: a string, a list of parts or {text: one of those}
+            t = t['text'] if isinstance(t, dict) else t
+            return ''.join(t) if isinstance(t, list) else t
+
+        first = next((whole(t) for t in m['text']), '')
+        n = sum(1 for t in m['text'] if whole(t).strip())
         lines = [
             f'text ({n} line{"s" * (n != 1)}' + (', line by line)' if 'slideshow' in m else ')')
         ]

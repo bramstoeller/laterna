@@ -23,8 +23,10 @@
     spot: false
 
 Every option may be left out or set to null (or auto, where it says so)
-for its default. A line is a string or {text, align, italic, bold, scale,
-x, y}: `align` left, center or right within the text block (default the
+for its default. A line is a string, a list of strings (its parts: with
+reveal each comes in as a step of its own, on the same line, which is
+aligned as a whole) or {text, align, italic, bold, scale, x, y} (text a
+string or such a list): `align` left, center or right within the text block (default the
 mapping's), `italic` slants it (as PowerPoint does for a font without an
 italic), `bold` thickens it, `scale` sizes it relative to the others; an
 empty line is a stanza break (STANZA of a line). A line with `x` and `y`
@@ -70,7 +72,7 @@ SPREAD_MAX = 1.6  # the automatic line height grows at most this much
 MARGIN = 0.05  # the default margin, of the opening's width
 SLANT = 0.2  # italic: the shear
 BOLD = 0.03  # bold: the stroke, in font sizes
-VERSION = 2  # of the layout: part of the hash (raise it when the layout changes)
+VERSION = 3  # of the layout: part of the hash (raise it when the layout changes)
 KEYS = (
     'text',
     'font',
@@ -86,13 +88,17 @@ KEYS = (
 
 
 def lines_of(mapping):
-    """The lines as dicts {text, align, italic, bold, scale, x, y}."""
+    """The lines as dicts {text, segments, align, italic, bold, scale, x,
+    y}: `text` the whole line, `segments` its parts (one, or the list the
+    line was given as), each a step of its own when it comes in."""
     out = []
     for line in mapping['text']:
-        line = {'text': line} if isinstance(line, str) else dict(line)
+        line = dict(line) if isinstance(line, dict) else {'text': line}
+        segments = list(line['text']) if isinstance(line['text'], list) else [line['text']]
         out.append(
             {
-                'text': line['text'],
+                'text': ''.join(segments),
+                'segments': segments,
                 'align': line.get('align') or mapping.get('align') or 'left',
                 'italic': bool(line.get('italic')),
                 'bold': bool(line.get('bold')),
@@ -102,6 +108,11 @@ def lines_of(mapping):
             }
         )
     return out
+
+
+def steps_of(mapping):
+    """How many steps the text comes in with: one per part of every line."""
+    return sum(len(line['segments']) for line in lines_of(mapping) if line['text'].strip())
 
 
 def opening(cfg, oid):
@@ -140,6 +151,7 @@ class Layout:
 
     def __init__(self, font_path, lines, size, spread, lead):
         self.entries = []  # per non-empty line, in order: see below
+        self.steps = []  # (entry, parts shown) per step the text comes in with
         fonts = {}
         y = 0.0
         width = 0.0
@@ -153,8 +165,13 @@ class Layout:
             if px not in fonts:
                 fonts[px] = ImageFont.truetype(str(font_path), px)
             font = fonts[px]
-            layer, advance = self._line(line, font)
-            entry = {'line': line, 'layer': layer, 'advance': advance, 'pad': font.size}
+            # a layer per number of parts shown, all aligned as the whole line
+            parts = line['segments']
+            layers = [self._line(line, font, ''.join(parts[:k]))[0] for k in range(1, len(parts))]
+            layer, advance = self._line(line, font, line['text'])
+            layers.append(layer)
+            self.steps += [(len(self.entries), k) for k in range(1, len(parts) + 1)]
+            entry = {'line': line, 'layers': layers, 'advance': advance, 'pad': font.size}
             entry['ascent'] = font.getmetrics()[0]
             entry['fixed'] = fixed
             if not fixed:
@@ -169,14 +186,16 @@ class Layout:
             e['x'] = _anchor(e['line']['align'], width, e['advance'])
 
     @staticmethod
-    def _line(line, font):
-        """(the line's ink as an L image with a pad of one font size, its advance)."""
+    def _line(line, font, text):
+        """(`text`, the line or its first parts, as an L image with a pad of
+        one font size and the room of the whole line; its advance)."""
         pad = font.size
-        advance = font.getlength(line['text'])
+        advance = font.getlength(text)
         stroke = round(BOLD * font.size) if line['bold'] else 0
-        layer = Image.new('L', (int(advance) + 2 * pad, int(font.size * 1.6) + 2 * pad), 0)
+        whole = font.getlength(line['text'])
+        layer = Image.new('L', (int(whole) + 2 * pad, int(font.size * 1.6) + 2 * pad), 0)
         ImageDraw.Draw(layer).text(
-            (pad, pad), line['text'], 255, font, stroke_width=stroke, stroke_fill=255
+            (pad, pad), text, 255, font, stroke_width=stroke, stroke_fill=255
         )
         if line['italic']:  # shear about the baseline
             base = pad + font.getmetrics()[0]
@@ -185,16 +204,23 @@ class Layout:
             )
         return layer, advance
 
+    def shown(self, upto=None):
+        """[(entry, its layer)] after the first `upto` steps (all: None)."""
+        parts = {}
+        for i, k in self.steps[:upto]:
+            parts[i] = k
+        return [(self.entries[i], self.entries[i]['layers'][k - 1]) for i, k in parts.items()]
+
     def ink(self, upto=None):
-        """The flowing lines among the first `upto` (all: None) as a mask,
-        the block's top left at (self.pad, self.pad)."""
+        """The flowing lines after the first `upto` steps (all: None) as a
+        mask, the block's top left at (self.pad, self.pad)."""
         m = self.pad
         size = (int(self.width) + 4 * m + 1, int(self.height) + 4 * m + 1)
         image = Image.new('L', size, 0)
-        for e in self.entries[:upto]:
+        for e, layer in self.shown(upto):
             if not e['fixed']:
                 image.paste(
-                    255, (round(e['x']) + m - e['pad'], round(e['y']) + m - e['pad']), e['layer']
+                    255, (round(e['x']) + m - e['pad'], round(e['y']) + m - e['pad']), layer
                 )
         return np.array(image)
 
@@ -206,15 +232,13 @@ class Layout:
         m = max((e['pad'] for e in self.entries if e['fixed']), default=0) * 2
         image = Image.new('L', (w + 2 * m, h + 2 * m), 0)
         total = 0  # the lines' ink, wherever it lands
-        for e in self.entries[:upto]:
+        for e, layer in self.shown(upto):
             if e['fixed']:
                 x, y = to_px(e['line']['x'], e['line']['y'])
                 left = x + _anchor(e['line']['align'], 0.0, e['advance'])
                 top = y - e['ascent']
-                image.paste(
-                    255, (round(left) + m - e['pad'], round(top) + m - e['pad']), e['layer']
-                )
-                total += int(np.count_nonzero(np.array(e['layer'])))
+                image.paste(255, (round(left) + m - e['pad'], round(top) + m - e['pad']), layer)
+                total += int(np.count_nonzero(np.array(layer)))
         inside = np.ascontiguousarray(np.array(image)[m : m + h, m : m + w])
         return inside, total - np.count_nonzero(inside)
 
@@ -376,7 +400,7 @@ def render_mapping(cfg, mapping):
         raise ValueError(f'text: font {mapping["font"]} not found in the show folder')
     mask, to_px = opening(cfg, mapping['objects'][0])
     key = _key(mapping, font_path, mask)
-    count = sum(1 for line in lines_of(mapping) if line['text'].strip())
+    count = steps_of(mapping)
     reveal = bool(mapping.get('reveal'))
     names = (
         [f'{TEXT_DIR}/{key}-{k:02d}.png' for k in range(count + 1)]

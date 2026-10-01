@@ -187,7 +187,7 @@ Align = Literal['left', 'center', 'right']
 
 
 class TextLine(Node):
-    text: str
+    text: str | Annotated[list[str], Field(min_length=1)]  # a list: parts that come in one by one
     align: Align | None = None
     italic: bool | None = None
     bold: bool | None = None
@@ -229,7 +229,7 @@ class Mapping(Timing):
     spot: bool | None = None  # false: no look.spot on this medium (lit evenly)
     loop: bool | None = None  # slideshow: false = stay on the last picture (default true)
     # text instead of a picture (laterna/text.py)
-    text: Annotated[list[str | TextLine], Field(min_length=1)] | None = None
+    text: Annotated[list[str | list[str] | TextLine], Field(min_length=1)] | None = None
     font: str | None = None  # a .ttf / .otf in the show folder
     color: Rgb | None = None
     background: Rgb | None = None
