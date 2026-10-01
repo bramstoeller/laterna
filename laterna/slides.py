@@ -1,14 +1,20 @@
-"""The backup as slides (backup.pptx), written with zipfile only: no
-python-pptx (lxml is a native dependency), just the few parts PowerPoint
-and Impress need for picture slides.
+"""The backup as slides (<show>.pptx), written with zipfile only: no
+python-pptx (lxml is a native dependency), just the parts PowerPoint and
+Impress need.
 
-The same pictures as the backup PDF, one slide each, full screen on black,
-but played like play.py plays them: each scene fades in over its fade,
-slideshow pictures fade over their transition_time at their time, and a
-scene with a hold moves on by itself when the hold has run out; the other
-scenes wait for a click or key (every slide also moves on at a click).
+One slide per scene, made of objects (laterna/layers.py): the pictures
+whole with PowerPoint's own crop, the text as text boxes in its font,
+flat colours, and over it all one mask with the frames and black. Played
+like play.py plays it: each scene fades in over its fade and moves on by
+itself when it has a hold (the others wait for a click or key);
+slideshow pictures and a text's lines fade in at their time. The slide's
+title (hidden: not on the screen, but in the overview) is the scene's
+number and name, its description is in the speaker notes. The font is
+named, not embedded: install it (it is in the show folder) where the
+slides are shown.
 """
 
+import hashlib
 import zipfile
 from xml.sax.saxutils import escape, quoteattr
 
@@ -101,62 +107,204 @@ def _transition(fade, advance):
     )
 
 
-def _slide(name, cx, cy, picture, fade, advance):
-    shape = ''
-    if picture:
-        shape = (
-            '<p:pic><p:nvPicPr><p:cNvPr id="2" name="picture"/>'
-            '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
-            '<p:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>'
-            f'<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>'
-            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>'
-        )
+def _emu(px):
+    return round(px * EMU_PER_PX)
+
+
+def _xfrm(box, flip=False):
+    x, y, w, h = box
+    attrs = ' flipH="1"' if flip else ''
     return (
-        f'{HEAD}<p:sld {XMLNS}><p:cSld name={quoteattr(name)}>{BLACK_BG}'
-        f'<p:spTree>{EMPTY_TREE}{shape}</p:spTree></p:cSld>'
-        f'<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>{_transition(fade, advance)}</p:sld>'
+        f'<a:xfrm{attrs}><a:off x="{_emu(x)}" y="{_emu(y)}"/>'
+        f'<a:ext cx="{max(1, _emu(w))}" cy="{max(1, _emu(h))}"/></a:xfrm>'
     )
 
 
-def timings(scenes, fades, views):
-    """Per slide, in show order: (fade in, seconds until it moves on by
-    itself or None). A scene's clock starts when its fade-in has finished
-    (play.py starts the hold there); view['t'] is when a slideshow picture
-    starts to fade in, view['fade'] how long that takes."""
-    out = []
-    for i, st in enumerate(scenes):
-        hold = st.get('hold') if i + 1 < len(scenes) else None
-        vs = views[i]
-        for k, v in enumerate(vs):
-            fade = (fades[i - 1] if i else 0.0) if k == 0 else v.get('fade', 0.0)
-            shown = v['t'] + (fade if k else 0.0)  # fully in, on the scene's clock
-            if k + 1 < len(vs):
-                advance = max(0.0, vs[k + 1]['t'] - shown)
-            else:
-                advance = None if hold is None else max(0.0, hold - shown)
-            out.append((fade, advance))
-    return out
+def _pic(sid, obj, rid):
+    crop = ''
+    if obj['crop'] is not None:
+        left, top, right, bottom = (round(v * 100000) for v in obj['crop'])
+        crop = f'<a:srcRect l="{left}" t="{top}" r="{right}" b="{bottom}"/>'
+    return (
+        f'<p:pic><p:nvPicPr><p:cNvPr id="{sid}" name={quoteattr(obj["name"])}/>'
+        '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
+        f'<p:blipFill><a:blip r:embed="{rid}"/>{crop}<a:stretch><a:fillRect/></a:stretch>'
+        f'</p:blipFill><p:spPr>{_xfrm(obj["box"], obj["flip"])}'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>'
+    )
 
 
-def write(path, cfg, scenes, fades, views, title):
-    """Write the backup pptx: every view (export.scene_views) a slide."""
+ALIGN = {'left': 'l', 'center': 'ctr', 'right': 'r'}
+
+
+def _text(sid, obj, lang):
+    """A text box with one part of a line: its box from the left edge to
+    the advance, the baseline `ascent` under its top (one line at single
+    spacing, no insets)."""
+    top = obj['baseline'] - obj['ascent']
+    box = (obj['x'], top, obj['width'], obj['ascent'] + obj['descent'])
+    colour = '{:02X}{:02X}{:02X}'.format(*obj['color'])
+    style = (' b="1"' if obj['bold'] else '') + (' i="1"' if obj['italic'] else '')
+    size = max(100, round(obj['size'] * EMU_PER_PX / 127))  # px -> 1/100 pt
+    run = (
+        f'<a:r><a:rPr lang="{lang}" sz="{size}"{style} dirty="0">'
+        f'<a:solidFill><a:srgbClr val="{colour}"/></a:solidFill>'
+        f'<a:latin typeface={quoteattr(obj["font"])}/><a:cs typeface={quoteattr(obj["font"])}/>'
+        f'</a:rPr><a:t>{escape(obj["text"])}</a:t></a:r>'
+    )
+    return (
+        f'<p:sp><p:nvSpPr><p:cNvPr id="{sid}" name={quoteattr(obj["name"])}/>'
+        '<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>'
+        f'<p:spPr>{_xfrm(box)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>'
+        '<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">'
+        '<a:noAutofit/></a:bodyPr><a:lstStyle/>'
+        f'<a:p><a:pPr algn="{ALIGN[obj["align"]]}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc>'
+        f'</a:pPr>{run}</a:p></p:txBody></p:sp>'
+    )
+
+
+def _title(name, lang, cx):
+    """The slide's title: in the overview, never on the screen (hidden,
+    and above the slide, for viewers that show hidden shapes anyway)."""
+    return (
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Title" hidden="1"/>'
+        '<p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr>'
+        f'</p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="{-_emu(100)}"/>'
+        f'<a:ext cx="{cx}" cy="{_emu(80)}"/>'
+        '</a:xfrm></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>'
+        f'<a:p><a:r><a:rPr lang="{lang}" dirty="0"/><a:t>{escape(name)}</a:t></a:r></a:p>'
+        '</p:txBody></p:sp>'
+    )
+
+
+def _timing(effects):
+    """The slide's animations: [(shape id, delay, duration, is text)], each
+    a fade-in that starts by itself (with the previous) `delay` seconds
+    after the slide is in."""
+    if not effects:
+        return ''
+    ids = iter(range(5, 10000))
+    pars = []
+    for sid, delay, duration, _ in effects:
+        target = f'<p:tgtEl><p:spTgt spid="{sid}"/></p:tgtEl>'
+        fade = ''
+        if duration > 0:
+            fade = (
+                f'<p:animEffect transition="in" filter="fade"><p:cBhvr>'
+                f'<p:cTn id="{next(ids)}" dur="{round(duration * 1000)}"/>{target}'
+                '</p:cBhvr></p:animEffect>'
+            )
+        pars.append(
+            f'<p:par><p:cTn id="{next(ids)}" presetID="10" presetClass="entr" presetSubtype="0" '
+            'fill="hold" grpId="0" nodeType="withEffect">'
+            f'<p:stCondLst><p:cond delay="{round(delay * 1000)}"/></p:stCondLst><p:childTnLst>'
+            f'<p:set><p:cBhvr><p:cTn id="{next(ids)}" dur="1" fill="hold"><p:stCondLst>'
+            f'<p:cond delay="0"/></p:stCondLst></p:cTn>{target}<p:attrNameLst>'
+            '<p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr>'
+            f'<p:to><p:strVal val="visible"/></p:to></p:set>{fade}</p:childTnLst></p:cTn></p:par>'
+        )
+    builds = ''.join(
+        f'<p:bldP spid="{sid}" grpId="0" animBg="1"/>' for sid, _, _, text in effects if text
+    )
+    slide = '<p:tgtEl><p:sldTgt/></p:tgtEl>'
+    return (
+        '<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" '
+        'nodeType="tmRoot"><p:childTnLst><p:seq concurrent="1" nextAc="seek">'
+        '<p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>'
+        '<p:par><p:cTn id="3" fill="hold"><p:stCondLst><p:cond delay="indefinite"/>'
+        '<p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond></p:stCondLst><p:childTnLst>'
+        '<p:par><p:cTn id="4" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst>'
+        f'<p:childTnLst>{"".join(pars)}</p:childTnLst></p:cTn></p:par>'
+        '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn>'
+        f'<p:prevCondLst><p:cond evt="onPrev" delay="0">{slide}</p:cond></p:prevCondLst>'
+        f'<p:nextCondLst><p:cond evt="onNext" delay="0">{slide}</p:cond></p:nextCondLst>'
+        '</p:seq></p:childTnLst></p:cTn></p:par></p:tnLst>'
+        + (f'<p:bldLst>{builds}</p:bldLst>' if builds else '')
+        + '</p:timing>'
+    )
+
+
+def _notes(text, lang):
+    body = ''.join(
+        f'<a:p><a:r><a:rPr lang="{lang}" dirty="0"/><a:t>{escape(line)}</a:t></a:r></a:p>'
+        for line in (text or '').splitlines() or ['']
+    )
+    return (
+        f'{HEAD}<p:notes {XMLNS}><p:cSld><p:spTree>{EMPTY_TREE}'
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image"/><p:cNvSpPr><a:spLocks noGrp="1" '
+        'noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr>'
+        '</p:nvSpPr><p:spPr/></p:sp>'
+        '<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes"/><p:cNvSpPr><a:spLocks noGrp="1"/>'
+        '</p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/>'
+        f'<p:txBody><a:bodyPr/><a:lstStyle/>{body}</p:txBody></p:sp>'
+        '</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>'
+    )
+
+
+NOTES_SIZE = (6858000, 9144000)
+
+
+def _notes_master():
+    nw, nh = NOTES_SIZE
+
+    def ph(sid, name, kind, idx, y, h):
+        idx = f' idx="{idx}"' if idx else ''
+        return (
+            f'<p:sp><p:nvSpPr><p:cNvPr id="{sid}" name="{name}"/><p:cNvSpPr>'
+            f'<a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="{kind}"{idx}/></p:nvPr>'
+            f'</p:nvSpPr><p:spPr><a:xfrm><a:off x="{nw // 10}" y="{y}"/>'
+            f'<a:ext cx="{nw * 8 // 10}" cy="{h}"/></a:xfrm>'
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:sp>'
+        )
+
+    return (
+        f'{HEAD}<p:notesMaster {XMLNS}><p:cSld><p:spTree>{EMPTY_TREE}'
+        + ph(2, 'Slide Image', 'sldImg', None, nh // 12, nh * 4 // 12)
+        + ph(3, 'Notes', 'body', 1, nh * 6 // 12, nh * 5 // 12)
+        + f'</p:spTree></p:cSld><p:clrMap {CLR_MAP}/></p:notesMaster>'
+    )
+
+
+def _slide(name, lang, cx, cy, shapes, fade, advance):
+    """shapes: [(xml, fade or None, is text)] back to front, their shape
+    ids from 3 on (2 is the title)."""
+    tree = _title(name, lang, cx) + ''.join(xml for xml, _, _ in shapes)
+    effects = [(3 + k, f[0], f[1], text) for k, (_, f, text) in enumerate(shapes) if f is not None]
+    return (
+        f'{HEAD}<p:sld {XMLNS}><p:cSld name={quoteattr(name)}>{BLACK_BG}'
+        f'<p:spTree>{EMPTY_TREE}{tree}</p:spTree></p:cSld>'
+        f'<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>{_transition(fade, advance)}'
+        f'{_timing(effects)}</p:sld>'
+    )
+
+
+TITLE_STYLES = (
+    '<p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="2400"/></a:lvl1pPr></p:titleStyle>'
+    '<p:bodyStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:bodyStyle>'
+    '<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles>'
+)
+
+
+def write(path, cfg, scenes, fades, objects, title):
+    """Write the backup pptx: a slide per scene, of its objects
+    (layers.Layers.scene, one list per scene)."""
     w, h = cfg['canvas']
     cx, cy = w * EMU_PER_PX, h * EMU_PER_PX
+    lang = {'nl': 'nl-NL'}.get(cfg.get('language') or 'en', 'en-GB')
     n = len(scenes)
-    slides = []  # (name, jpeg bytes or None)
-    for i, st in enumerate(scenes):
-        for k, v in enumerate(views[i]):
-            name = f'{i + 1}/{n} {st.get("name", "?")}'
-            if len(views[i]) > 1:
-                name += f' [{k + 1}/{len(views[i])}]'
-            slides.append((name, v['full']))
-    times = timings(scenes, fades, views)
+    title_ph = (
+        '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/>'
+        '</p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm>'
+        f'<a:off x="0" y="0"/><a:ext cx="{cx}" cy="{_emu(80)}"/></a:xfrm></p:spPr>'
+        '<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr/></a:p></p:txBody></p:sp>'
+    )
 
     parts = {}
     types = [
         ('presentation.main+xml', '/ppt/presentation.xml'),
         ('slideMaster+xml', '/ppt/slideMasters/slideMaster1.xml'),
         ('slideLayout+xml', '/ppt/slideLayouts/slideLayout1.xml'),
+        ('notesMaster+xml', '/ppt/notesMasters/notesMaster1.xml'),
         ('presProps+xml', '/ppt/presProps.xml'),
     ]
     parts['_rels/.rels'] = (
@@ -175,26 +323,29 @@ def write(path, cfg, scenes, fades, views, title):
     parts['ppt/presentation.xml'] = (
         f'{HEAD}<p:presentation {XMLNS}>'
         '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>'
+        '<p:notesMasterIdLst><p:notesMasterId r:id="rId4"/></p:notesMasterIdLst>'
         '<p:sldIdLst>'
-        + ''.join(f'<p:sldId id="{256 + j}" r:id="rId{10 + j}"/>' for j in range(len(slides)))
-        + f'</p:sldIdLst><p:sldSz cx="{cx}" cy="{cy}"/><p:notesSz cx="6858000" cy="9144000"/>'
-        '</p:presentation>'
+        + ''.join(f'<p:sldId id="{256 + j}" r:id="rId{10 + j}"/>' for j in range(n))
+        + f'</p:sldIdLst><p:sldSz cx="{cx}" cy="{cy}"/>'
+        f'<p:notesSz cx="{NOTES_SIZE[0]}" cy="{NOTES_SIZE[1]}"/></p:presentation>'
     )
     parts['ppt/_rels/presentation.xml.rels'] = _rels(
         [
             ('rId1', 'slideMaster', 'slideMasters/slideMaster1.xml'),
             ('rId2', 'theme', 'theme/theme1.xml'),
             ('rId3', 'presProps', 'presProps.xml'),
+            ('rId4', 'notesMaster', 'notesMasters/notesMaster1.xml'),
         ]
-        + [(f'rId{10 + j}', 'slide', f'slides/slide{j + 1}.xml') for j in range(len(slides))]
+        + [(f'rId{10 + j}', 'slide', f'slides/slide{j + 1}.xml') for j in range(n)]
     )
     parts['ppt/presProps.xml'] = f'{HEAD}<p:presentationPr {XMLNS}/>'
     parts['ppt/theme/theme1.xml'] = _theme()
+    parts['ppt/theme/theme2.xml'] = _theme()
     parts['ppt/slideMasters/slideMaster1.xml'] = (
-        f'{HEAD}<p:sldMaster {XMLNS}><p:cSld>{BLACK_BG}<p:spTree>{EMPTY_TREE}</p:spTree>'
-        f'</p:cSld><p:clrMap {CLR_MAP}/>'
+        f'{HEAD}<p:sldMaster {XMLNS}><p:cSld>{BLACK_BG}<p:spTree>{EMPTY_TREE}{title_ph}'
+        f'</p:spTree></p:cSld><p:clrMap {CLR_MAP}/>'
         '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>'
-        '</p:sldMaster>'
+        f'{TITLE_STYLES}</p:sldMaster>'
     )
     parts['ppt/slideMasters/_rels/slideMaster1.xml.rels'] = _rels(
         [
@@ -203,30 +354,63 @@ def write(path, cfg, scenes, fades, views, title):
         ]
     )
     parts['ppt/slideLayouts/slideLayout1.xml'] = (
-        f'{HEAD}<p:sldLayout {XMLNS} type="blank"><p:cSld name="Blank">'
-        f'<p:spTree>{EMPTY_TREE}</p:spTree></p:cSld>'
+        f'{HEAD}<p:sldLayout {XMLNS} type="titleOnly"><p:cSld name="Title only">'
+        f'<p:spTree>{EMPTY_TREE}{title_ph}</p:spTree></p:cSld>'
         '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>'
     )
     parts['ppt/slideLayouts/_rels/slideLayout1.xml.rels'] = _rels(
         [('rId1', 'slideMaster', '../slideMasters/slideMaster1.xml')]
     )
-    media = {}
-    for j, ((name, picture), (fade, advance)) in enumerate(zip(slides, times)):
-        rels = [('rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml')]
-        if picture:
-            media[f'ppt/media/image{j + 1}.jpg'] = picture
-            rels.append(('rId2', 'image', f'../media/image{j + 1}.jpg'))
-        parts[f'ppt/slides/slide{j + 1}.xml'] = _slide(name, cx, cy, picture, fade, advance)
-        parts[f'ppt/slides/_rels/slide{j + 1}.xml.rels'] = _rels(rels)
-        types.append(('slide+xml', f'/ppt/slides/slide{j + 1}.xml'))
+    parts['ppt/notesMasters/notesMaster1.xml'] = _notes_master()
+    parts['ppt/notesMasters/_rels/notesMaster1.xml.rels'] = _rels(
+        [('rId1', 'theme', '../theme/theme2.xml')]
+    )
+    media = {}  # sha1 -> part name: a picture used again is stored once
+    for i, scene in enumerate(scenes):
+        name = f'{i + 1}/{n} {scene.get("name", "?")}'
+        fade = fades[i - 1] if i else 0.0
+        hold = scene.get('hold') if i + 1 < n else None
+        rels = [
+            ('rId1', 'slideLayout', '../slideLayouts/slideLayout1.xml'),
+            ('rId2', 'notesSlide', f'../notesSlides/notesSlide{i + 1}.xml'),
+        ]
+        shapes = []
+        for k, obj in enumerate(objects[i]):
+            sid = 3 + k
+            if obj['kind'] == 'text':
+                shapes.append((_text(sid, obj, lang), obj['fade'], True))
+                continue
+            digest = hashlib.sha1(obj['data']).hexdigest()
+            if digest not in media:
+                media[digest] = (f'ppt/media/image{len(media) + 1}.{obj["ext"]}', obj['data'])
+            rid = f'rId{len(rels) + 1}'
+            rels.append((rid, 'image', '../' + media[digest][0].removeprefix('ppt/')))
+            shapes.append((_pic(sid, obj, rid), obj['fade'], False))
+        parts[f'ppt/slides/slide{i + 1}.xml'] = _slide(
+            name, lang, cx, cy, shapes, fade, None if hold is None else float(hold)
+        )
+        parts[f'ppt/slides/_rels/slide{i + 1}.xml.rels'] = _rels(rels)
+        parts[f'ppt/notesSlides/notesSlide{i + 1}.xml'] = _notes(scene.get('description'), lang)
+        parts[f'ppt/notesSlides/_rels/notesSlide{i + 1}.xml.rels'] = _rels(
+            [
+                ('rId1', 'notesMaster', '../notesMasters/notesMaster1.xml'),
+                ('rId2', 'slide', f'../slides/slide{i + 1}.xml'),
+            ]
+        )
+        types.append(('slide+xml', f'/ppt/slides/slide{i + 1}.xml'))
+        types.append(('notesSlide+xml', f'/ppt/notesSlides/notesSlide{i + 1}.xml'))
 
-    overrides = ''.join(
-        f'<Override PartName="{name}" ContentType="{CT}{t}"/>' for t, name in types
-    ) + (
-        '<Override PartName="/ppt/theme/theme1.xml" '
-        'ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>'
-        '<Override PartName="/docProps/core.xml" '
-        'ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+    overrides = (
+        ''.join(f'<Override PartName="{name}" ContentType="{CT}{t}"/>' for t, name in types)
+        + ''.join(
+            f'<Override PartName="/ppt/theme/theme{k}.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>'
+            for k in (1, 2)
+        )
+        + (
+            '<Override PartName="/docProps/core.xml" '
+            'ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+        )
     )
     content_types = (
         f'{HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -234,11 +418,12 @@ def write(path, cfg, scenes, fades, views, title):
         'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
         '<Default Extension="xml" ContentType="application/xml"/>'
         '<Default Extension="jpg" ContentType="image/jpeg"/>'
+        '<Default Extension="png" ContentType="image/png"/>'
         f'{overrides}</Types>'
     )
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('[Content_Types].xml', content_types)
         for name, text in parts.items():
             z.writestr(name, text)
-        for name, data in media.items():
-            z.writestr(name, data, compress_type=zipfile.ZIP_STORED)  # JPEG: already compressed
+        for name, data in media.values():
+            z.writestr(name, data, compress_type=zipfile.ZIP_STORED)  # already compressed

@@ -19,9 +19,13 @@ the backup after the show's folder (shows/my-show: my-show.pdf, my-show.pptx):
                  distinct combination of its pictures, a video as its
                  first frame; with the keystone warp of config.yaml, like
                  the presentation (the others show the plane)
-  <show>.pptx    the same pictures as slides, played like the show: fades,
-                 slideshow changes at their time, holds moving on by
-                 themselves, the rest on a click or key (laterna/slides.py)
+  <show>.pptx    the scenes as slides of objects (laterna/layers.py): the
+                 pictures whole with PowerPoint's crop, text as text, one
+                 mask with the frames; played like the show: fades,
+                 slideshow pictures and text lines at their time, holds
+                 moving on by themselves, the rest on a click or key, the
+                 descriptions in the speaker notes (laterna/slides.py; on
+                 the plane, without the keystone)
   scenes.pdf     the scenes as scenes.yaml sets them, in a table: timing,
                  blackout, colours and what each object shows (no
                  descriptions: the values only)
@@ -46,7 +50,7 @@ import cv2
 import numpy as np
 import pygame
 
-from . import dmx, documents, frame, render, slides, ui, video
+from . import dmx, documents, frame, layers, render, slides, ui, video
 from .look import WHITE_VIEW
 
 EXPORT_DIR = '_export'
@@ -405,6 +409,9 @@ def export_all(
     for i, scene in enumerate(scenes):
         progress(f'scene {i + 1}/{len(scenes)}: {scene.get("name", "?")}')
         views.append(scene_views(cfg, renderer, scene, gain, projector))
+    progress("the slides' objects...")
+    pieces = layers.Layers(cfg, renderer, gain)
+    objects = [pieces.scene(scene, lambda path: _source(cfg, path)) for scene in scenes]
     progress('pictures for the config pages...')
     extras = config_renders(cfg, renderer, scenes, views, gain)
 
@@ -418,7 +425,7 @@ def export_all(
     progress(f'writing {pdf.name}...')
     documents.backup(pdf, cfg, scenes, views)
     progress(f'writing {pptx.name}...')
-    slides.write(pptx, cfg, scenes, fades, views, f'{documents.show_name(cfg)} · backup')
+    slides.write(pptx, cfg, scenes, fades, objects, f'{documents.show_name(cfg)} · backup')
     progress(f'writing {paths[0].name}...')
     documents.run_sheet(
         paths[0],

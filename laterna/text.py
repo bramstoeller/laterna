@@ -416,9 +416,61 @@ def render_mapping(cfg, mapping):
             _write(folder / name, _picture(ink, mapping))
     out = {k: v for k, v in mapping.items() if k not in KEYS}
     out['text'] = mapping['text']  # kept for the export's scenes sheet
+    out['_text'] = dict(mapping)  # the whole text, for the pptx's text boxes (boxes())
     if reveal:
         out['slideshow'] = names
         out['loop'] = False
     else:
         out['image'] = names[0]
     return out
+
+
+def boxes(cfg, mapping):
+    """The text as the pictures set it, as boxes for real text (the pptx):
+    (the pictures' shape (h, w), [{'step', 'text', 'x', 'baseline',
+    'width', 'size', 'ascent', 'descent', 'align', 'italic', 'bold'}]) in
+    picture px, one per part of every line, in the order they come in
+    (step 1 the first); x is the part's left edge, width its advance,
+    size the font's px, align how the box aligns its text (a line in one
+    part as the line aligns, a part of a longer line left). `mapping` is
+    the text mapping as scenes.yaml gives it (render_mapping keeps it as
+    '_text')."""
+    folder = pathlib.Path(cfg['_dir'])
+    font_path = folder / mapping['font']
+    mask, to_px = opening(cfg, mapping['objects'][0])
+    lay, (dx, dy) = layout(mapping, font_path, mask, to_px)
+    m = lay.pad
+    fonts = {}
+    out = []
+    for step, (i, k) in enumerate(lay.steps, 1):
+        e = lay.entries[i]
+        line = e['line']
+        px = e['pad']  # the pad is one font size
+        if px not in fonts:
+            fonts[px] = ImageFont.truetype(str(font_path), px)
+        font = fonts[px]
+        if e['fixed']:
+            x, y = to_px(line['x'], line['y'])
+            left = round(x + _anchor(line['align'], 0.0, e['advance']))
+            baseline = round(y - e['ascent']) + e['ascent']
+        else:
+            left = round(e['x']) + m + dx
+            baseline = round(e['y']) + m + dy + e['ascent']
+        parts = line['segments']
+        single = len(parts) == 1
+        out.append(
+            {
+                'step': step,
+                'text': parts[k - 1],
+                'x': left + (0.0 if single else font.getlength(''.join(parts[: k - 1]))),
+                'baseline': baseline,
+                'width': e['advance'] if single else font.getlength(parts[k - 1]),
+                'size': font.size,
+                'ascent': font.getmetrics()[0],
+                'descent': font.getmetrics()[1],
+                'align': line['align'] if single else 'left',
+                'italic': line['italic'],
+                'bold': line['bold'],
+            }
+        )
+    return mask.shape, out

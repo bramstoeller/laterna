@@ -68,7 +68,11 @@ In show order, each saving what it sets to `config.yaml`:
    name, description, how it is reached and goes on, its timing and what
    every frame shows
 7. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF,
-   and the backup as slides with fades and holds (`<show>.pptx`)
+   and the backup as slides (`<show>.pptx`): a slide per scene of separate
+   objects (the pictures whole with PowerPoint's crop, text as text in its
+   font, one mask with the frames), with the fades, holds, slideshow
+   pictures and text lines at their time, the descriptions in the speaker
+   notes; install the show's font where the slides are shown
 8. **DMX**: the desk's source, address and channels, live, and a demo with
    faders on screen
 9. **Present**: play the scenes from `scenes.yaml`
