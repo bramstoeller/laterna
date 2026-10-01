@@ -11,13 +11,14 @@ an underscore, so everything else in a show is yours and those can go.
 The apps, in show order:
 
   1  test pattern      (static pixel patterns)
-  2  dynamic range     (near-black/white steps, staircase, gamma chart)
-  3  global alignment  (scale, rotation, position -> config.yaml)
-  4  shape calibration (align objects with the frames -> config.yaml)
-  5  look              (brightness per layer, spotlights -> config.yaml)
-  6  export            (config, cue sheet, backup and scenes as PDF, backup as pptx -> _export/)
-  7  dmx               (the desk: source, address, channels -> config.yaml; a demo with faders)
-  8  present           (play the scenes from scenes.yaml)
+  2  global alignment  (scale, rotation, position -> config.yaml)
+  3  shape calibration (align objects with the frames -> config.yaml)
+  4  dynamic range     (near-black/white steps, staircase, gamma chart)
+  5  look              (brightness per layer, spotlights, molding -> config.yaml)
+  6  preview           (the scenes one by one, still, with all there is to know)
+  7  export            (config, cue sheet, backup and scenes as PDF, backup as pptx -> _export/)
+  8  dmx               (the desk: source, address, channels -> config.yaml; a demo with faders)
+  9  present           (play the scenes from scenes.yaml)
 
 Click a button or press its number. The apps run in this process and reuse
 the menu's fullscreen display, so there is no mode switch (no flicker):
@@ -41,6 +42,7 @@ from . import (
     export,
     look,
     play,
+    preview,
     render,
     test_pattern,
     ui,
@@ -52,10 +54,11 @@ from . import (
 SKIP_DIRS = {'venv', '__pycache__', 'images', 'videos', 'build', 'dist', 'node_modules'}
 APPS = [
     ('Test pattern', test_pattern),
-    ('Dynamic range', dynamic_range),
     ('Global alignment', align_global),
     ('Shape calibration', configure),
+    ('Dynamic range', dynamic_range),
     ('Look', look),
+    ('Preview', preview),
     ('Export', export),
     ('DMX', desk),
     ('Present', play),

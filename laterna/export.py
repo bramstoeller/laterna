@@ -31,7 +31,7 @@ the lamps show it with the desk at full (laterna/lamps.py), so the export
 follows whatever config and scenes are loaded; nothing is taken from the
 render cache.
 
-Menu mode (step 6) shows the progress; Q / Esc cancels. From the command
+Menu mode (step 7) shows the progress; Q / Esc cancels. From the command
 line it runs headless:
 
   python -m laterna.export [--config config.yaml] [--scenes scenes.yaml] [--out export]

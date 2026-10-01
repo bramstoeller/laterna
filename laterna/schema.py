@@ -155,7 +155,7 @@ class Config(Node):
     rotation: float | None = None
     image_offset: Point | None = None
     # projector px the canvas corners move (top left, top right, bottom
-    # right, bottom left): the keystone correction, step 3
+    # right, bottom left): the keystone correction, step 2
     keystone: Annotated[list[Point], Field(min_length=4, max_length=4)] | None = None
     projector: Projector | None = None
     border: Border

@@ -269,8 +269,8 @@ TEXTS = {
         'nl': 'beamer-px',
     },
     'config.corners_note': {
-        'en': 'Edges of the inner polygon: {lo} to {hi} mm, {n} corners. In step 4 (page corners) < > selects a corner, the arrows move it 1 mm (Shift 10).',
-        'nl': 'Zijden van de binnenpolygoon: {lo} tot {hi} mm, {n} hoeken. In stap 4 (pagina corners) kiest < > een hoek, de pijlen verschuiven hem 1 mm (Shift 10).',
+        'en': 'Edges of the inner polygon: {lo} to {hi} mm, {n} corners. In step 3 (page corners) < > selects a corner, the arrows move it 1 mm (Shift 10).',
+        'nl': 'Zijden van de binnenpolygoon: {lo} tot {hi} mm, {n} hoeken. In stap 3 (pagina corners) kiest < > een hoek, de pijlen verschuiven hem 1 mm (Shift 10).',
     },
     'config.molding': {
         'en': 'Molding and light',

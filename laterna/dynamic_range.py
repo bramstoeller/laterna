@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Dynamic range and gamma check for the projector (step 2).
+"""Dynamic range and gamma check for the projector (step 4).
 
 Proven test patterns, all available in the same colours as the test
 patterns:

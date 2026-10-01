@@ -58,17 +58,20 @@ show folder is yours.
 In show order, each saving what it sets to `config.yaml`:
 
 1. **Test pattern**: static pixel patterns
-2. **Dynamic range**: near-black/white steps, gamma chart
-3. **Global alignment**: keystone (only for a tilted projector), then scale,
+2. **Global alignment**: keystone (only for a tilted projector), then scale,
    rotation and position of the image
-4. **Shape calibration**: move the frames' corners onto the real frames
+3. **Shape calibration**: move the frames' corners onto the real frames
+4. **Dynamic range**: near-black/white steps, gamma chart
 5. **Look**: brightness per layer, spotlights, colour temperature, and the
    molding's profile and light
-6. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF,
+6. **Preview**: the scenes one by one as stills, each with its number,
+   name, description, how it is reached and goes on, its timing and what
+   every frame shows
+7. **Export**: config sheet, cue sheet, backup and the scenes' values as PDF,
    and the backup as slides with fades and holds (`<show>.pptx`)
-7. **DMX**: the desk's source, address and channels, live, and a demo with
+8. **DMX**: the desk's source, address and channels, live, and a demo with
    faders on screen
-8. **Present**: play the scenes from `scenes.yaml`
+9. **Present**: play the scenes from `scenes.yaml`
 
 Q / Esc goes back: from an app to the show's menu, from there to the
 show list, from there it quits. Each app also runs on its own inside a
