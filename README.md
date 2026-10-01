@@ -82,10 +82,10 @@ one. laterna sets the text as large as fits the frame's opening:
 
 ```yaml
 - text:
-    - Een leven in puin, net als dat van ons
+    - "Een leven in puin, net als dat van ons"
     - ""                                  # a stanza break
-    - {text: – Jep Gambardella, align: right}
-    - {text: La Grande Bellezza, align: right, italic: true}
+    - {text: "– Jep Gambardella", align: right}
+    - {text: "La Grande Bellezza", align: right, italic: true}
   font: fonts/Attic.ttf
   reveal: true                            # a line every hold + transition_time
   hold: 2
@@ -98,7 +98,7 @@ Also `color`, `background`, `align` (left, center, right), `valign` (top,
 middle, bottom), `size` (mm, or `auto`), `line_height` (or `auto`) and
 `margin` (one fraction of the opening's width, or `[top, right, bottom,
 left]`); every option may be `null` for its default. A line can stand
-at a place of its own: `{text: …, x: …, y: …}` in the frame's mm (x from
+at a place of its own: `{text: "…", x: …, y: …}` in the frame's mm (x from
 its middle, y up from the bottom of the wood). See `laterna/text.py`. A slideshow can stop on its last picture with
 `loop: false`.
 

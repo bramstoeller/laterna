@@ -1,12 +1,12 @@
 """Text in a frame: a scenes.yaml mapping with `text:` instead of a picture.
 
   - text:
-      - Een leven in puin, net als dat van ons
-      - In plaats van de soeverein te spelen
+      - "Een leven in puin, net als dat van ons"
+      - "In plaats van de soeverein te spelen"
       - ""                                    # a stanza break
-      - Iedereen staat op de rand van de afgrond
-      - {text: – Jep Gambardella, align: right}
-      - {text: La Grande Bellezza, align: right, italic: true}
+      - "Iedereen staat op de rand van de afgrond"
+      - {text: "– Jep Gambardella", align: right}
+      - {text: "La Grande Bellezza", align: right, italic: true}
       - {text: "1926", x: -900, y: 150}       # a place of its own
     font: fonts/Attic.ttf     # a .ttf / .otf, relative to the show folder
     color: [255, 255, 255]    # null: white
