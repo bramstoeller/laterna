@@ -273,7 +273,7 @@ def _fingerprint(config, scenes_path, cfg, scenes, supersample):
     of every shape SVG and every referenced image/video, and the rendering
     code itself."""
     h = hashlib.sha256()
-    settings = yaml.safe_load(pathlib.Path(config).read_text()) or {}
+    settings = yaml.safe_load(render.read_text(config)) or {}
     settings.pop('dmx', None)
     h.update(yaml.safe_dump(settings, sort_keys=True).encode())
     h.update(pathlib.Path(scenes_path).read_bytes())
@@ -296,7 +296,7 @@ def _manifest_valid(fp, scenes):
     if not MANIFEST.exists():
         return False
     try:
-        data = yaml.safe_load(MANIFEST.read_text())
+        data = yaml.safe_load(MANIFEST.read_text(encoding='utf-8'))
     except Exception:
         return False
     total = len(scenes)
@@ -463,7 +463,9 @@ def run(
                 pygame.event.post(pygame.event.Event(RENDER_DONE, index=i))
             # only a complete, uncancelled render may declare the cache valid
             if not stop.is_set():
-                MANIFEST.write_text(yaml.safe_dump({'fingerprint': fp, 'scenes': total}))
+                MANIFEST.write_text(
+                    yaml.safe_dump({'fingerprint': fp, 'scenes': total}), encoding='utf-8'
+                )
                 print('render cache complete')
 
         thread = threading.Thread(target=worker, daemon=True)

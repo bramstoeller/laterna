@@ -464,7 +464,7 @@ def export_all(
     )
     progress(f'writing {paths[1].name}...')
     documents.config_sheet(
-        paths[1], cfg, config.read_text(), object_geometry(cfg), extras, dmx_info(cfg), source
+        paths[1], cfg, render.read_text(config), object_geometry(cfg), extras, dmx_info(cfg), source
     )
     progress(f'writing {paths[2].name}...')
     documents.scenes_sheet(paths[2], cfg, scenes, fades, data, source)

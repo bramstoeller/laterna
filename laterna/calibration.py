@@ -155,5 +155,5 @@ def reset_corners(cfg, selected, snap, index=None):
 
 def save_config(cfg, path):
     data = {k: v for k, v in cfg.items() if not str(k).startswith('_')}
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         yaml.dump(data, f, sort_keys=False, default_flow_style=None, width=100, allow_unicode=True)

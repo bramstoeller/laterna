@@ -452,7 +452,7 @@ def write_json_schemas(folder='.'):
     folder = pathlib.Path(folder)
     for name, model in (('config', Config), ('scenes', Scenes)):
         path = folder / f'{name}.schema.json'
-        path.write_text(json.dumps(model.model_json_schema(), indent=2) + '\n')
+        path.write_text(json.dumps(model.model_json_schema(), indent=2) + '\n', encoding='utf-8')
         print(f'written: {path}')
 
 

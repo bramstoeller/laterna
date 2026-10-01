@@ -78,10 +78,20 @@ PROFILES = {
 _IMAGE_CACHE = {}
 
 
+def read_text(path):
+    """A text file (config.yaml, scenes.yaml) as UTF-8, whatever the system's
+    own encoding (Windows: cp1252); a file an older version wrote there in
+    that encoding still reads."""
+    data = pathlib.Path(path).read_bytes()
+    try:
+        return data.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return data.decode('cp1252', errors='replace')
+
+
 def load_config(path):
     path = pathlib.Path(path)
-    with open(path) as f:
-        cfg = schema.check_config(yaml.safe_load(f), path.name)
+    cfg = schema.check_config(yaml.safe_load(read_text(path)), path.name)
     cfg['_dir'] = path.resolve().parent
     return cfg
 
@@ -1012,8 +1022,7 @@ def draw_source(canvas, source, mapping, polys_px, ref_rect, cfg, ss=1):
 
 def load_scenes(path):
     """The slideshow (scenes.yaml): hand-written, separate from the object config."""
-    with open(path) as f:
-        return yaml.safe_load(f)
+    return yaml.safe_load(read_text(path))
 
 
 def parse_scenes(data, cfg):

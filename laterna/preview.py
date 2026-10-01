@@ -247,7 +247,9 @@ def run(screen=None, config='config.yaml', scenes_path='scenes.yaml', supersampl
             if not _blackout(scene):
                 stills[i] = (still(cfg, scene, base, alpha, lut), moldings[key])
         if not stop.is_set():
-            play.MANIFEST.write_text(yaml.safe_dump({'fingerprint': fp, 'scenes': len(scenes)}))
+            play.MANIFEST.write_text(
+                yaml.safe_dump({'fingerprint': fp, 'scenes': len(scenes)}), encoding='utf-8'
+            )
 
     valid = play._manifest_valid(fp, scenes)
     thread = threading.Thread(target=from_cache if valid else make_cache, daemon=True)

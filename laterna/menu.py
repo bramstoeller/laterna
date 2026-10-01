@@ -85,8 +85,8 @@ def find_shows(root):
 def show_description(folder):
     """The optional `description` at the top of a show's config.yaml."""
     try:
-        with open(folder / 'config.yaml') as f:
-            return str((yaml.safe_load(f) or {}).get('description') or '').strip()
+        data = yaml.safe_load(render.read_text(folder / 'config.yaml')) or {}
+        return str(data.get('description') or '').strip()
     except Exception as exc:
         return f'unreadable: {exc}'
 
