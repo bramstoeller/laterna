@@ -432,6 +432,14 @@ TEXTS = {
         'en': 'video {name}',
         'nl': 'video {name}',
     },
+    'run.text_of': {
+        'en': 'text, {n} lines',
+        'nl': 'tekst, {n} regels',
+    },
+    'run.text_reveal_of': {
+        'en': 'text, {n} lines, line by line',
+        'nl': 'tekst, {n} regels, regel voor regel',
+    },
     'backup.title': {
         'en': 'Backup',
         'nl': 'Backup',

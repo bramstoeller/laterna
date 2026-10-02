@@ -317,11 +317,20 @@ def scene_facts(scenes, fades):
     return facts
 
 
+def _line_text(t):
+    """A text line as one string: a string, a list of parts or {text: one of those}."""
+    t = t['text'] if isinstance(t, dict) else t
+    return ''.join(t) if isinstance(t, list) else t
+
+
 def _media_label(m):
     name = (m.get('image') or m.get('video') or '').replace('\\', '/').split('/')[-1]
     stem = name.rsplit('.', 1)[0]
     if 'video' in m:
         return 'video', tr('run.video_of', name=stem)
+    if 'text' in m:  # a revealed text plays as a slideshow of its steps
+        n = sum(1 for t in m['text'] if _line_text(t).strip())
+        return 'text', tr('run.text_reveal_of' if 'slideshow' in m else 'run.text_of', n=n)
     if 'slideshow' in m:
         return 'slideshow', tr('run.slideshow_of', n=len(m['slideshow']))
     return 'image', stem
@@ -329,7 +338,7 @@ def _media_label(m):
 
 def object_contents(scene, cfg):
     """{object id: (kind, text)} of what a scene shows on each object;
-    kind is black, fill, image, video or slideshow."""
+    kind is black, fill, image, video, slideshow or text."""
     if scene.get('blackout'):
         return {o['id']: ('black', tr('run.black')) for o in cfg['objects']}
     out = {o['id']: ('fill', tr('run.fill')) for o in cfg['objects']}
@@ -1300,13 +1309,8 @@ def _mapping_lines(m):
         return str(path).replace('\\', '/').split('/')[-1]
 
     if 'text' in m:
-
-        def whole(t):  # a line: a string, a list of parts or {text: one of those}
-            t = t['text'] if isinstance(t, dict) else t
-            return ''.join(t) if isinstance(t, list) else t
-
-        first = next((whole(t) for t in m['text']), '')
-        n = sum(1 for t in m['text'] if whole(t).strip())
+        first = next((_line_text(t) for t in m['text']), '')
+        n = sum(1 for t in m['text'] if _line_text(t).strip())
         lines = [
             f'text ({n} line{"s" * (n != 1)}' + (', line by line)' if 'slideshow' in m else ')')
         ]
