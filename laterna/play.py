@@ -109,7 +109,10 @@ A mapping with `slideshow: [images]` shows those images in turn inside its
 polygons: each holds `hold` seconds, then a `transition` (only `fade` so
 far) of `transition_time` seconds leads to the next, wrapping after the
 last. It is played like a video (alpha layer, per-tick compositing) and
-follows the same rules for starting, restarting and running on.
+follows the same rules for restarting and running on, but it starts when
+the fade into its scene is over: during the fade it shows its first
+picture (a text revealed line by line, which plays as a slideshow of its
+steps, its background). A video starts at once.
 """
 
 import argparse
@@ -500,11 +503,13 @@ def run(
 
     def frame_for(i):
         """Current image of scene i (None while it is still rendering); a
-        scene with video composites its due frame in first."""
+        scene with video composites its due frame in first. Only the scene
+        the show is on runs its slideshows: one being faded into shows
+        their first state (video.ScenePlayer.tick)."""
         player = get_player(i)
         if player is None:
             return None
-        return player.tick(now())[0]
+        return player.tick(now(), waiting=i != idx)[0]
 
     def molding_for(i):
         """Image with only scene i's molding; one object per distinct

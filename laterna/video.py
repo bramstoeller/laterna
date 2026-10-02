@@ -432,20 +432,24 @@ class ScenePlayer:
             if path not in keep:
                 clip.t0 = None
 
-    def tick(self, now):
-        """(frame, changed) for wall-clock time now (seconds)."""
+    def tick(self, now, waiting=False):
+        """(frame, changed) for wall-clock time now (seconds). waiting: the
+        scene is still being faded into, so a slideshow (or a text revealed
+        line by line) that is not running yet shows its first state and
+        starts once the scene is on; videos start at once."""
         if not self.specs:
             return self.base, False
         changed = False
         for s in self.specs:
             clip = self.clips[s['path']]
-            if clip.t0 is None:  # (re)start this clip's own timeline
+            held = clip.t0 is None and waiting and s['kind'] == 'slideshow'
+            if clip.t0 is None and not held:  # (re)start this clip's own timeline
                 clip.t0 = now
                 clip.rewind()
                 for spec in self.specs:
                     if spec['path'] == s['path']:
                         spec['shown'] = -1
-            t = now - clip.t0
+            t = 0.0 if held else now - clip.t0  # held at its start until the fade is over
             if s['kind'] == 'slideshow':
                 a, b, blend = state = clip.state_at(t)
                 rows_a, key_a = _slide_rows(s, a, clip.local_time(t, a), self.lut)
